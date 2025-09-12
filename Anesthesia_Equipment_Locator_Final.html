@@ -1,0 +1,1057 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Hospital for Sick Children — Anesthesia Equipment Locator</title>
+<style>
+  :root { color-scheme: dark; --bg:#0b1220; --panel:#111827; --ink:#e5e7eb; --muted:#9ca3af; --border:#374151; --green:#22c55e; --red:#ef4444; }
+  *{box-sizing:border-box} html,body{height:100%} body{margin:0; padding:24px; background:var(--bg); color:var(--ink); font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif}
+  .layout{display:grid; grid-template-columns:minmax(320px,520px) 1fr; gap:24px}
+  @media (max-width:1100px){ .layout{grid-template-columns:1fr} }
+  .card{background:var(--panel); border:1px solid var(--border); border-radius:16px; padding:18px}
+  h1{font-size:clamp(20px,2.2vw,28px); margin:0 0 8px}
+  .muted{color:var(--muted)} .small{font-size:12px}
+  input[type="search"]{width:100%; padding:12px 14px; border-radius:12px; border:1px solid var(--border); background:#0f172a; color:var(--ink); outline:none}
+  input[type="search"]:focus{border-color:#64748b; box-shadow:0 0 0 3px rgba(148,163,184,.15)}
+  #legend{display:flex; gap:10px; flex-wrap:wrap; margin:10px 0 0}
+  #legend .pill{display:inline-flex; align-items:center; gap:8px; padding:6px 10px; background:#0f172a; border:1px solid var(--border); border-radius:999px; font-size:12px; color:var(--muted)}
+  #legend .sw{width:14px; height:14px; border-radius:4px; border:1px solid var(--border); display:inline-block}
+  #resultList article{margin-top:10px; border-radius:12px; border:1px solid var(--border); padding:12px; background:#0f172a}
+  .bin{display:inline-block; margin:2px; padding:2px 6px; border-radius:8px; border:1px solid var(--border); font-size:12px; background:transparent}
+  #mapWrap{position:relative; width:100%; aspect-ratio: 1000 / 700; background:#0f172a; border:1px solid var(--border); border-radius:16px; overflow:hidden}
+  svg{width:100%; height:100%; display:block}
+  .room{fill:#0f172a; stroke:#475569; stroke-width:2}
+  .door{fill:var(--green); stroke:#86efac; stroke-width:2}
+  .equip{fill:var(--red); stroke:#fecaca; stroke-width:2}
+  .cart-rect{fill:#fde68a; stroke:#94a3b8; stroke-width:2}
+  .cart-label{fill:#000; font-weight:700}
+  .light{fill:var(--ink); font-weight:600}
+  .pulse{filter:drop-shadow(0 0 0 rgba(234,179,8,.0)); animation:pulse 1.2s ease-in-out 4}
+  @keyframes pulse{0%{filter:drop-shadow(0 0 0 rgba(234,179,8,.0))}50%{filter:drop-shadow(0 0 16px rgba(234,179,8,.9))}100%{filter:drop-shadow(0 0 0 rgba(234,179,8,.0))}}
+  .toolbar{display:flex; gap:8px; align-items:center; justify-content:space-between; margin-bottom:8px}
+  .kbd{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size:12px; background:#0b1220; border:1px solid var(--border); padding:2px 6px; border-radius:6px; color:var(--muted)}
+</style>
+</head>
+<body>
+  <header style="margin-bottom:16px">
+  <h1 style="font-size:2.2em; font-weight:700; color:#1a237e; margin-bottom:4px; letter-spacing:0.5px;">Anesthesia Equipment Locator</h1>
+  <div style="font-size:1.15em; color:#374151; font-weight:500; margin-bottom:2px;">Hospital for Sick Children</div>
+  <div style="font-size:0.98em; color:#607d8b; margin-bottom:8px;">Toronto, Ontario, Canada</div>
+
+  </header>
+
+  <div class="layout">
+    <section class="card">
+      <div class="toolbar">
+        <label for="q" class="small">Search equipment</label>
+
+      </div>
+      <input id="q" type="search" placeholder="e.g., bougie, breathing bag, circuit…"/>
+      <div id="legend">
+        <span class="pill"><span class="sw" style="background:#fde68a"></span>Cart</span>
+        <span class="pill"><span class="sw" style="background:var(--green)"></span>Doorway</span>
+        <span class="pill"><span class="sw" style="background:var(--red)"></span>Equipment area</span>
+      </div>
+      <p id="status" class="muted small" style="margin-top:8px"></p>
+      <div id="resultList"></div>
+    </section>
+
+    <section class="card">
+      <div id="mapWrap">
+        <svg id="map" viewBox="0 0 1000 700" aria-label="Supply room map"></svg>
+      </div>
+      <p class="muted small" style="margin-top:8px">
+        <strong>How to use:</strong> This interactive anesthesia equipment locator map can be used by searching for the equipment in the search bar or by clicking the cart and exploring the layout.
+      </p>
+    </section>
+  </div>
+
+  <script>
+    // ======== DATA EMBEDDED DIRECTLY IN CODE ========
+    const RECORDS = [
+  {name:`ADAPTER FOR O2 TUBING`,location:`G-6`,bins:["G-6"],carts:["G"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+  {name:`ALCOHOL WIPE (LARGE)`,location:`I-1`,bins:["I-1"],carts:["I"],HSC:`63026`,VendorItemID:`LP104-01`,REF:``},
+  {name:`AMBU BAG MASK (ADULT)`,location:`G-8`,bins:["G-8"],carts:["G"],HSC:`1112`,VendorItemID:`H015372`,REF:``},
+  {name:`AMBU BAG MASK (PAEDS)`,location:`G-8`,bins:["G-8"],carts:["G"],HSC:`38556`,VendorItemID:`M161055104`,REF:``},
+  {name:`AMPOULE CRACKER (SMALL) (1-4 ml)`,location:`I-1`,bins:["I-1"],carts:["I"],HSC:`43605`,VendorItemID:`60605-04`,REF:``},
+  {name:`ANESTHESIA CIRCUIT (EXTENSION)`,location:`A-9`,bins:["A-9"],carts:["A"],HSC:`50055`,VendorItemID:`V245108EX`,REF:``},
+  {name:`ANESTHESIA CIRCUIT (NEONATAL)`,location:`A-6`,bins:["A-6"],carts:["A"],HSC:`69967`,VendorItemID:`MP00333`,REF:``},
+  {name:`ANESTHESIA CIRCUIT (PEDIATRIC)`,location:`A8+A7`,bins:["A8", "A7"],carts:["A"],HSC:`36077`,VendorItemID:`C37101678D-NL`,REF:``},
+  {name:`ARNDT ENDOBRONCHIAL BLOCKER SET (5 Fr x 50 cm)`,location:`D-7`,bins:["D-7"],carts:["D"],HSC:`36275`,VendorItemID:`G44109`,REF:``},
+  {name:`ARNDT ENDOBRONCHIAL BLOCKER SET (7 Fr x 65 cm)`,location:`D-7`,bins:["D-7"],carts:["D"],HSC:`39605`,VendorItemID:`G26907`,REF:``},
+  {name:`ARTERIAL BLOOD GAS KIT`,location:`I-1`,bins:["I-1"],carts:["I"],HSC:`73250`,VendorItemID:`WES3101JT`,REF:``},
+  {name:`ARTERIAL CATH SET (22 G x 5 cm)`,location:`I-8`,bins:["I-8"],carts:["I"],HSC:`39603`,VendorItemID:`SAC-00522-PBX`,REF:``},
+  {name:`ARTERIAL CATH SET (22 G x 8 cm)`,location:`I-8`,bins:["I-8"],carts:["I"],HSC:`39602`,VendorItemID:`SAC-00822-PBX`,REF:``},
+  {name:`ARTLINE TRANSDUCER HOLDER`,location:`H-1`,bins:["H-1"],carts:["H"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+  {name:`BAIR HUGGER (ADULT) (UNDERBODY)`,location:`F-6`,bins:["F-6"],carts:["F"],HSC:`43685`,VendorItemID:`3M54500`,REF:``},
+  {name:`BAIR HUGGER (PAEDS) (LARGE) (UNDERBODY)`,location:`F-7`,bins:["F-7"],carts:["F"],HSC:`43684`,VendorItemID:`3M55000`,REF:``},
+  {name:`BAIR HUGGER (PAEDS) (UNDERBODY)`,location:`E9+F9`,bins:["E9", "F9"],carts:["E", "F"],HSC:`43683`,VendorItemID:`3M55501`,REF:``},
+  {name:`BAIR HUGGER (SMALL) (LOWER BODY)`,location:`F-8`,bins:["F-8"],carts:["F"],HSC:`73491`,VendorItemID:`3M52500`,REF:``},
+  {name:`BANDAID (LATEX FREE) (RECTANGLE) (3.8 cm x 5 cm)`,location:`I-5`,bins:["I-5"],carts:["I"],HSC:`55513`,VendorItemID:`BSN7645612`,REF:``},
+  {name:`BATTERY (9 VOLT)`,location:`F-1`,bins:["F-1"],carts:["F"],HSC:`28014`,VendorItemID:`PGPC1604BK`,REF:``},
+  {name:`BATTERY (AA)`,location:`F-1`,bins:["F-1"],carts:["F"],HSC:`62217`,VendorItemID:`PGPC1500BK`,REF:``},
+  {name:`BATTERY (C)`,location:`F-1`,bins:["F-1"],carts:["F"],HSC:`1486`,VendorItemID:`PGPC1400`,REF:``},
+  {name:`BIFUSE`,location:`J-4`,bins:["J-4"],carts:["J"],HSC:`60238`,VendorItemID:`ICMC33691`,REF:``},
+  {name:`BIOPSY VALVE`,location:`D-8`,bins:["D-8"],carts:["D"],HSC:`28330`,VendorItemID:`MAJ-210JIT`,REF:``},
+  {name:`BLOCK NEEDLE (22 G x 100 mm)`,location:`E-5`,bins:["E-5"],carts:["E"],HSC:`78290`,VendorItemID:`001285-77`,REF:``},
+  {name:`BLOCK NEEDLE (22 G x 50 mm)`,location:`E-5`,bins:["E-5"],carts:["E"],HSC:`43885`,VendorItemID:`001285-74`,REF:``},
+  {name:`BLOCK NEEDLE (22 G x 80 mm)`,location:`E-5`,bins:["E-5"],carts:["E"],HSC:`43882`,VendorItemID:`001285-71`,REF:``},
+  {name:`BLOOD FILTER`,location:`H-6`,bins:["H-6"],carts:["H"],HSC:`3957`,VendorItemID:`4C7750`,REF:``},
+  {name:`BLOOD FILTER`,location:`H-6`,bins:["H-6"],carts:["H"],HSC:`75710`,VendorItemID:`179-B30150`,REF:``},
+  {name:`BLUNT NEEDLE (18 G x 1.5")`,location:`I-6`,bins:["I-6"],carts:["I"],HSC:`60852`,VendorItemID:`BD305180`,REF:``},
+  {name:`BLUNT NEEDLE w/FILTER (18 G x 1.5")`,location:`I-7`,bins:["I-7"],carts:["I"],HSC:`60814`,VendorItemID:`BD305211`,REF:``},
+  {name:`BLUNT PLASTIC CANNULA`,location:`I-7`,bins:["I-7"],carts:["I"],HSC:`4172`,VendorItemID:`BD303345`,REF:``},
+  {name:`BP CUFF (PHILIPS) (Sz. 1)`,location:`G-2`,bins:["G-2"],carts:["G"],HSC:`73216`,VendorItemID:`M1866B`,REF:``},
+  {name:`BP CUFF (PHILIPS) (Sz. 2)`,location:`G-2`,bins:["G-2"],carts:["G"],HSC:`73212`,VendorItemID:`M1868SJT`,REF:``},
+  {name:`BP CUFF (PHILIPS) (Sz. 3)`,location:`G-2`,bins:["G-2"],carts:["G"],HSC:`73213`,VendorItemID:`M1870S`,REF:``},
+  {name:`BP CUFF (PHILIPS) (Sz. 4)`,location:`G-2`,bins:["G-2"],carts:["G"],HSC:`73214`,VendorItemID:`M1872S`,REF:``},
+  {name:`BP CUFF (PHILIPS) (Sz. 5)`,location:`G-2`,bins:["G-2"],carts:["G"],HSC:`73215`,VendorItemID:`M1873SJT`,REF:``},
+  {name:`BP CUFF (RESUSABLE) (ADULT) (LARGE)`,location:`G-2`,bins:["G-2"],carts:["G"],HSC:`74507`,VendorItemID:`989803147891`,REF:``},
+  {name:`BP CUFF (RESUSABLE) (ADULT) (REGULAR)`,location:`G-2`,bins:["G-2"],carts:["G"],HSC:`74506`,VendorItemID:`989803147871`,REF:``},
+  {name:`BP CUFF (RESUSABLE) (ADULT) (SMALL)`,location:`G-2`,bins:["G-2"],carts:["G"],HSC:`74505`,VendorItemID:`989803147861`,REF:``},
+  {name:`BP CUFF (RESUSABLE) (INFANT)`,location:`G-2`,bins:["G-2"],carts:["G"],HSC:`74503`,VendorItemID:`989803147841`,REF:``},
+  {name:`BP CUFF (RESUSABLE) (PAEDS)`,location:`G-2`,bins:["G-2"],carts:["G"],HSC:`74504`,VendorItemID:`989803147851`,REF:``},
+  {name:`BREATHING BAG (2 L)`,location:`A-6`,bins:["A-6"],carts:["A"],HSC:`55156`,VendorItemID:`670002JT`,REF:``},
+  {name:`BRONCH ADAPTER`,location:`D-5`,bins:["D-5"],carts:["D"],HSC:`43907`,VendorItemID:`1898000`,REF:``},
+  {name:`BRONCHOSCOPE AIRWAY (Sz. 0, 36 mm)`,location:`D-4`,bins:["D-4"],carts:["D"],HSC:`69298`,VendorItemID:`30-40-400-1`,REF:``},
+  {name:`BRONCHOSCOPE AIRWAY (Sz. 2, 65 mm)`,location:`D-4`,bins:["D-4"],carts:["D"],HSC:`69299`,VendorItemID:`30-40-420-1`,REF:``},
+  {name:`BRONCHOSCOPE AIRWAY (Sz. 4, 85 mm)`,location:`D-4`,bins:["D-4"],carts:["D"],HSC:`69300`,VendorItemID:`30-40-440-1`,REF:``},
+  {name:`BUTTERFLY NEEDLE (BD) (BLUE) (25 G x 0.75")`,location:`I-1`,bins:["I-1"],carts:["I"],HSC:`63334`,VendorItemID:`BD367363`,REF:``},
+  {name:`CADD SET (EPIDURAL)`,location:`E-8`,bins:["E-8"],carts:["E"],HSC:`52526`,VendorItemID:`21-7349-24`,REF:``},
+  {name:`CADD SET (NERVE BLOCK)`,location:`E-8`,bins:["E-8"],carts:["E"],HSC:`56047`,VendorItemID:`21-7346-24JT`,REF:``},
+  {name:`CATHETER (EPIDURAL)`,location:`E-2`,bins:["E-2"],carts:["E"],HSC:`7680`,VendorItemID:`4910-18JT`,REF:``},
+  {name:`CATHETER (EXCHANGE AIRWAY) (11 Fr x 83 cm)`,location:`D6-B-2`,bins:["D6-B-2"],carts:["D"],HSC:`44131`,VendorItemID:`G06732`,REF:``},
+  {name:`CATHETER (EXCHANGE AIRWAY) (8 Fr x 45 cm)`,location:`D6-B-1`,bins:["D6-B-1"],carts:["D"],HSC:`43687`,VendorItemID:`G07833`,REF:``},
+  {name:`CATHETER (FOGARTY OCCLUSION) (3 Fr x 80 cm)`,location:`D-6`,bins:["D-6"],carts:["D"],HSC:`581`,VendorItemID:`120803F`,REF:``},
+  {name:`CATHETER MAHURKAR (10 Fr x 12 cm)`,location:`H-7`,bins:["H-7"],carts:["H"],HSC:`36249`,VendorItemID:`8817143005`,REF:``},
+  {name:`CATHETER MAHURKAR (11.5 Fr x 19.5 cm)`,location:`H-7`,bins:["H-7"],carts:["H"],HSC:`43814`,VendorItemID:`8813793009`,REF:``},
+  {name:`CHLORHEXIDINE SWABSTICK (SMALL)`,location:`I-1`,bins:["I-1"],carts:["I"],HSC:`60825`,VendorItemID:`3M10203`,REF:``},
+  {name:`CMAC BLADE (Sz. 0)`,location:`C-6`,bins:["C-6"],carts:["C"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+  {name:`CMAC BLADE (Sz. 1)`,location:`C-6`,bins:["C-6"],carts:["C"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+  {name:`CMAC BLADE (Sz. 2)`,location:`C-5`,bins:["C-5"],carts:["C"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+  {name:`CMAC BLADE (Sz. 3)`,location:`C-5`,bins:["C-5"],carts:["C"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+  {name:`CMAC BLADE (Sz. 4)`,location:`C-5`,bins:["C-5"],carts:["C"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+  {name:`CMAC BLADE (Sz. 5)`,location:`C-5`,bins:["C-5"],carts:["C"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+  {name:`CO2 ABSORBER`,location:`A-2`,bins:["A-2"],carts:["A"],HSC:`74526`,VendorItemID:`MX00004`,REF:``},
+  {name:`CO2 SAMPLING LINE`,location:`A-3`,bins:["A-3"],carts:["A"],HSC:`72293`,VendorItemID:`12-1040`,REF:``},
+  {name:`COLD SPRAY`,location:`H-3`,bins:["H-3"],carts:["H"],HSC:`55639`,VendorItemID:`0386-0008-03`,REF:``},
+  {name:`COLOR CARTRIDGE`,location:`F-1`,bins:["F-1"],carts:["F"],HSC:`64350`,VendorItemID:`SLS500-LR833`,REF:``},
+  {name:`CO-OXIMETRY PULSE OX SENSOR (>30 Kg) (ADULT)`,location:`F-4`,bins:["F-4"],carts:["F"],HSC:`78285`,VendorItemID:`4026`,REF:``},
+  {name:`CO-OXIMETRY PULSE OX SENSOR (10-15 Kg) (PAEDS)`,location:`F-4`,bins:["F-4"],carts:["F"],HSC:`78286`,VendorItemID:`4027`,REF:``},
+  {name:`CO-OXIMETRY PULSE OX SENSOR (3-30 Kg) (INFANT)`,location:`F-4`,bins:["F-4"],carts:["F"],HSC:`78287`,VendorItemID:`4028`,REF:``},
+  {name:`CUROS CAP (GREEN) (MALE) (ON STRIP)`,location:`J-1`,bins:["J-1"],carts:["J"],HSC:`69094`,VendorItemID:`3MCM5-200R`,REF:``},
+  {name:`CUROS CAPS (FEMALE) (STERILE)`,location:`J-1`,bins:["J-1"],carts:["J"],HSC:`69214`,VendorItemID:`3MCFF1-270R`,REF:``},
+  {name:`CVL (DOUBLE LUMEN) (4 Fr x 5 cm)`,location:`H-8`,bins:["H-8"],carts:["H"],HSC:`594`,VendorItemID:`G04133`,REF:``},
+  {name:`CVL (DOUBLE LUMEN) (5 Fr x 5 cm)`,location:`H-8`,bins:["H-8"],carts:["H"],HSC:`595`,VendorItemID:`G04022`,REF:``},
+  {name:`CVL (DOUBLE LUMEN) (5 Fr x 8 cm)`,location:`H-8`,bins:["H-8"],carts:["H"],HSC:`596`,VendorItemID:`G03997`,REF:``},
+  {name:`CVL (TRIPLE LUMEN) (5 Fr x 5 cm)`,location:`H-8`,bins:["H-8"],carts:["H"],HSC:`599`,VendorItemID:`G04134`,REF:``},
+  {name:`CVL (TRIPLE LUMEN) (5 Fr x 8 cm)`,location:`H-8`,bins:["H-8"],carts:["H"],HSC:`600`,VendorItemID:`G04135`,REF:``},
+  {name:`CVL (TRIPLE LUMEN) (7 Fr x 15 cm)`,location:`H-8`,bins:["H-8"],carts:["H"],HSC:`598`,VendorItemID:`G02937`,REF:``},
+  {name:`CVL SUPPORT KIT`,location:`H-7`,bins:["H-7"],carts:["H"],HSC:`62930`,VendorItemID:`DYNJ52283C`,REF:``},
+  {name:`DEFIB PADS (GEL PAD)`,location:`I-7`,bins:["I-7"],carts:["I"],HSC:`976`,VendorItemID:`3M2345N`,REF:``},
+  {name:`DIAGNOSTIC RECORDING (DEFIB) PAPER`,location:`G-6`,bins:["G-6"],carts:["G"],HSC:`70931`,VendorItemID:`800000087701JT`,REF:``},
+  {name:`DILATOR (3 Fr x 10 cm)`,location:`I-8`,bins:["I-8"],carts:["I"],HSC:`10273`,VendorItemID:`G02577`,REF:``},
+  {name:`DILATOR (COONS) (6 Fr)`,location:`I-8`,bins:["I-8"],carts:["I"],HSC:`42229`,VendorItemID:`G04221`,REF:``},
+  {name:`DOUBLE LUMEN ETT (LEFT) (Sz. 26)`,location:`D-3`,bins:["D-3"],carts:["D"],HSC:`27738`,VendorItemID:`116100260`,REF:``},
+  {name:`DOUBLE LUMEN ETT (LEFT) (Sz. 28)`,location:`D-3`,bins:["D-3"],carts:["D"],HSC:`27532`,VendorItemID:`116100280`,REF:``},
+  {name:`DOUBLE LUMEN ETT (LEFT) (Sz. 32)`,location:`D-3`,bins:["D-3"],carts:["D"],HSC:`43957`,VendorItemID:`125032`,REF:``},
+  {name:`DOUBLE LUMEN ETT (LEFT) (Sz. 35)`,location:`D-3`,bins:["D-3"],carts:["D"],HSC:`27533`,VendorItemID:`116100350`,REF:``},
+  {name:`DOUBLE LUMEN ETT (LEFT) (Sz. 37)`,location:`D-2`,bins:["D-2"],carts:["D"],HSC:`27534`,VendorItemID:`116100370`,REF:``},
+  {name:`DOUBLE LUMEN ETT (LEFT) (Sz. 39)`,location:`D-2`,bins:["D-2"],carts:["D"],HSC:`43961`,VendorItemID:`116100390`,REF:``},
+  {name:`DOUBLE LUMEN ETT (LEFT) (Sz. 41)`,location:`D-2`,bins:["D-2"],carts:["D"],HSC:`43962`,VendorItemID:`116100410`,REF:``},
+  {name:`DOUBLE LUMEN ETT (RIGHT) (Sz. 26)`,location:`D-2`,bins:["D-2"],carts:["D"],HSC:`27739`,VendorItemID:`116200260`,REF:``},
+  {name:`DOUBLE LUMEN ETT (RIGHT) (Sz. 32)`,location:`D-1`,bins:["D-1"],carts:["D"],HSC:`49637`,VendorItemID:`197-32R`,REF:``},
+  {name:`DOUBLE LUMEN ETT (RIGHT) (Sz. 35)`,location:`D-1`,bins:["D-1"],carts:["D"],HSC:`27535`,VendorItemID:`116200350`,REF:``},
+  {name:`DOUBLE LUMEN ETT (RIGHT) (Sz. 37)`,location:`D-1`,bins:["D-1"],carts:["D"],HSC:`29438`,VendorItemID:`116200370`,REF:``},
+  {name:`DOUBLE LUMEN ETT (RIGHT) (Sz. 39)`,location:`D-1`,bins:["D-1"],carts:["D"],HSC:`43985`,VendorItemID:`116200390`,REF:``},
+  {name:`DOUBLE LUMEN ETT (RIGHT) (Sz. 41)`,location:`D-1`,bins:["D-1"],carts:["D"],HSC:`43986`,VendorItemID:`116200410`,REF:``},
+  {name:`DRAPE (OPTHALMIC) (BILATERAL) (31" x 50")`,location:`E-8`,bins:["E-8"],carts:["E"],HSC:`70276`,VendorItemID:`890419JT`,REF:``},
+  {name:`E-CATH TSUI (18 G x 51 mm)`,location:`E-5`,bins:["E-5"],carts:["E"],HSC:`61004`,VendorItemID:`301185-40E`,REF:``},
+  {name:`E-CATH TSUI (18 G x 75 mm)`,location:`E-5`,bins:["E-5"],carts:["E"],HSC:`61005`,VendorItemID:`211185-40E`,REF:``},
+  {name:`ECG CABLES (NEONATAL)`,location:`H-1`,bins:["H-1"],carts:["H"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+  {name:`ECG CABLES (PAEDS)`,location:`H-1`,bins:["H-1"],carts:["H"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+  {name:`ECG EXTENSION`,location:`G-1`,bins:["G-1"],carts:["G"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+  {name:`EEG CABLES`,location:`G-1`,bins:["G-1"],carts:["G"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+  {name:`EEG LEADS (REUSABLE)`,location:`G-1`,bins:["G-1"],carts:["G"],HSC:`78258`,VendorItemID:`989803105641`,REF:``},
+  {name:`EEG SENSOR (SEDLINE) (ADULT)`,location:`F-3`,bins:["F-3"],carts:["F"],HSC:`78892`,VendorItemID:`4248`,REF:``},
+  {name:`EEG SENSOR (SEDLINE) (PAEDS)`,location:`F-3`,bins:["F-3"],carts:["F"],HSC:`78891`,VendorItemID:`4329`,REF:``},
+  {name:`EEG STICKERS (NEO/ PAEDS)`,location:`G-1`,bins:["G-1"],carts:["G"],HSC:`12585`,VendorItemID:`13951C`,REF:``},
+  {name:`EEG TRUNK CABLES`,location:`G-1`,bins:["G-1"],carts:["G"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+  {name:`EFONA TRAY`,location:`D-7`,bins:["D-7"],carts:["D"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+  {name:`ELBOW CONNECTOR w/GAS PORT`,location:`A-5`,bins:["A-5"],carts:["A"],HSC:`36076`,VendorItemID:`225-3523-804`,REF:``},
+  {name:`ENDOSCOPY MASK (Sz. 1)`,location:`D-8`,bins:["D-8"],carts:["D"],HSC:`44026`,VendorItemID:`VBM30-40-111`,REF:``},
+  {name:`ENDOSCOPY MASK (Sz. 3)`,location:`D-8`,bins:["D-8"],carts:["D"],HSC:`44027`,VendorItemID:`VBM30-40-333`,REF:``},
+  {name:`ENDOSCOPY MASK (Sz. 5)`,location:`D-8`,bins:["D-8"],carts:["D"],HSC:`44028`,VendorItemID:`VBM30-40-555`,REF:``},
+  {name:`EPIDURAL CATHETER W/ STYLET (20 G)`,location:`E-2`,bins:["E-2"],carts:["E"],HSC:`43890`,VendorItemID:`001151-37C`,REF:``},
+  {name:`EPIDURAL FILTER (LUER LOCK)`,location:`E-2`,bins:["E-2"],carts:["E"],HSC:`66714`,VendorItemID:`179-100/386/010CZ`,REF:``},
+  {name:`EPIDURAL SET (SPIROL) 2" X 18 G W/ CATHETER`,location:`E-3`,bins:["E-3"],carts:["E"],HSC:`62671`,VendorItemID:`194-2036`,REF:``},
+  {name:`EPIGUARD SECUREMENT DEVICE`,location:`E-2`,bins:["E-2"],carts:["E"],HSC:`43894`,VendorItemID:`8170`,REF:``},
+  {name:`ETT (CUFFED) (3.0 mm)`,location:`C-8`,bins:["C-8"],carts:["C"],HSC:`72296`,VendorItemID:`35111`,REF:``},
+  {name:`ETT (CUFFED) (3.5 mm)`,location:`C-8`,bins:["C-8"],carts:["C"],HSC:`72297`,VendorItemID:`35112`,REF:``},
+  {name:`ETT (CUFFED) (4.0 mm)`,location:`C-7`,bins:["C-7"],carts:["C"],HSC:`72298`,VendorItemID:`35113`,REF:``},
+  {name:`ETT (CUFFED) (4.5 mm)`,location:`C-7`,bins:["C-7"],carts:["C"],HSC:`72299`,VendorItemID:`35114`,REF:``},
+  {name:`ETT (CUFFED) (5.0 mm)`,location:`C-7`,bins:["C-7"],carts:["C"],HSC:`32138`,VendorItemID:`100-199-050JT`,REF:``},
+  {name:`ETT (CUFFED) (5.5 mm)`,location:`C-7`,bins:["C-7"],carts:["C"],HSC:`32139`,VendorItemID:`100-199-055JT`,REF:``},
+  {name:`ETT (CUFFED) (6.0 mm)`,location:`C-7`,bins:["C-7"],carts:["C"],HSC:`32140`,VendorItemID:`100-199-060JT`,REF:``},
+  {name:`ETT (CUFFED) (6.5 mm)`,location:`C-7`,bins:["C-7"],carts:["C"],HSC:`32141`,VendorItemID:`100-199-065JT`,REF:``},
+  {name:`ETT (CUFFED) (7.0 mm)`,location:`C-7`,bins:["C-7"],carts:["C"],HSC:`32142`,VendorItemID:`100-199-070JT`,REF:``},
+  {name:`ETT (CUFFED) (7.5 mm)`,location:`C-7`,bins:["C-7"],carts:["C"],HSC:`32143`,VendorItemID:`100-199-075JT`,REF:``},
+  {name:`ETT (CUFFED) (8.0 mm)`,location:`C-7`,bins:["C-7"],carts:["C"],HSC:`32144`,VendorItemID:`100/199/080`,REF:``},
+  {name:`ETT (CUFFED) (8.5 mm)`,location:`C-7`,bins:["C-7"],carts:["C"],HSC:`32145`,VendorItemID:`100/199/085`,REF:``},
+  {name:`ETT (CUFFED) (REINFORCED) (5.0 mm)`,location:`C-1`,bins:["C-1"],carts:["C"],HSC:`31536`,VendorItemID:`5-12610`,REF:``},
+  {name:`ETT (CUFFED) (REINFORCED) (5.5 mm)`,location:`C-1`,bins:["C-1"],carts:["C"],HSC:`62293`,VendorItemID:`5-12611`,REF:``},
+  {name:`ETT (CUFFED) (REINFORCED) (6.0 mm)`,location:`C-1`,bins:["C-1"],carts:["C"],HSC:`43901`,VendorItemID:`F15038975060U`,REF:``},
+  {name:`ETT (CUFFED) (REINFORCED) (6.5 mm)`,location:`C-1`,bins:["C-1"],carts:["C"],HSC:`43904`,VendorItemID:`5-12613`,REF:``},
+  {name:`ETT (CUFFED) (REINFORCED) (7.0 mm)`,location:`C-1`,bins:["C-1"],carts:["C"],HSC:`43905`,VendorItemID:`5-12614`,REF:``},
+  {name:`ETT (CUFFED) (REINFORCED) (7.5 mm)`,location:`C-1`,bins:["C-1"],carts:["C"],HSC:`43906`,VendorItemID:`5-12615`,REF:``},
+  {name:`ETT (UNCUFFED) (2.0 mm)`,location:`C-8`,bins:["C-8"],carts:["C"],HSC:`71512`,VendorItemID:`5-10404`,REF:``},
+  {name:`ETT (UNCUFFED) (2.5 mm)`,location:`C-8`,bins:["C-8"],carts:["C"],HSC:`32146`,VendorItemID:`100-127-025JT`,REF:``},
+  {name:`ETT (UNCUFFED) (3.0 mm)`,location:`C-8`,bins:["C-8"],carts:["C"],HSC:`32147`,VendorItemID:`100-127-030JT`,REF:``},
+  {name:`ETT (UNCUFFED) (3.5 mm)`,location:`C-8`,bins:["C-8"],carts:["C"],HSC:`32148`,VendorItemID:`100-127-035JT`,REF:``},
+  {name:`ETT (UNCUFFED) (4.0 mm)`,location:`C-8`,bins:["C-8"],carts:["C"],HSC:`32149`,VendorItemID:`100-127-040JT`,REF:``},
+  {name:`ETT (UNCUFFED) (4.5 mm)`,location:`C-8`,bins:["C-8"],carts:["C"],HSC:`32150`,VendorItemID:`100-127-045JT`,REF:``},
+  {name:`ETT (UNCUFFED) (5.0 mm)`,location:`C-8`,bins:["C-8"],carts:["C"],HSC:`32151`,VendorItemID:`100-127-050JT`,REF:``},
+  {name:`ETT (UNCUFFED) (5.5 mm)`,location:`C-8`,bins:["C-8"],carts:["C"],HSC:`32152`,VendorItemID:`100-127-055JT`,REF:``},
+  {name:`ETT (UNCUFFED) (6.0 mm)`,location:`C-8`,bins:["C-8"],carts:["C"],HSC:`32153`,VendorItemID:`100/127/060`,REF:``},
+  {name:`ETT (UNCUFFED) (REINFORCED) (3.0 mm)`,location:`C-2`,bins:["C-2"],carts:["C"],HSC:`63613`,VendorItemID:`F15038965030U`,REF:``},
+  {name:`ETT (UNCUFFED) (REINFORCED) (3.5 mm)`,location:`C-2`,bins:["C-2"],carts:["C"],HSC:`31535`,VendorItemID:`F15038965035U`,REF:``},
+  {name:`ETT (UNCUFFED) (REINFORCED) (4.5 mm)`,location:`C-2`,bins:["C-2"],carts:["C"],HSC:`63615`,VendorItemID:`F15038965045U`,REF:``},
+  {name:`ETT NASAL RAE (CUFFED) (3.5 mm)`,location:`C-4`,bins:["C-4"],carts:["C"],HSC:`59759`,VendorItemID:`111781035`,REF:``},
+  {name:`ETT NASAL RAE (CUFFED) (4.0 mm)`,location:`C-4`,bins:["C-4"],carts:["C"],HSC:`59760`,VendorItemID:`1-7323-40`,REF:``},
+  {name:`ETT NASAL RAE (CUFFED) (4.5 mm)`,location:`C-4`,bins:["C-4"],carts:["C"],HSC:`59761`,VendorItemID:`1-7323-45`,REF:``},
+  {name:`ETT NASAL RAE (CUFFED) (5.0 mm)`,location:`C-4`,bins:["C-4"],carts:["C"],HSC:`59762`,VendorItemID:`1-7323-50`,REF:``},
+  {name:`ETT NASAL RAE (CUFFED) (5.5 mm)`,location:`C-4`,bins:["C-4"],carts:["C"],HSC:`59763`,VendorItemID:`111781055`,REF:``},
+  {name:`ETT NASAL RAE (CUFFED) (6.0 mm)`,location:`C-4`,bins:["C-4"],carts:["C"],HSC:`645`,VendorItemID:`96360`,REF:``},
+  {name:`ETT NASAL RAE (CUFFED) (6.5 mm)`,location:`C-4`,bins:["C-4"],carts:["C"],HSC:`646`,VendorItemID:`96365`,REF:``},
+  {name:`ETT NASAL RAE (CUFFED) (7.0 mm)`,location:`C-4`,bins:["C-4"],carts:["C"],HSC:`6817`,VendorItemID:`96370`,REF:``},
+  {name:`ETT NASAL RAE (CUFFED) (7.5 mm)`,location:`C-4`,bins:["C-4"],carts:["C"],HSC:`647`,VendorItemID:`96375`,REF:``},
+  {name:`ETT NASAL RAE (UNCUFFED) (3.5 mm)`,location:`C-2`,bins:["C-2"],carts:["C"],HSC:`69071`,VendorItemID:`5-22107`,REF:``},
+  {name:`ETT NASAL RAE (UNCUFFED) (4.0 mm)`,location:`C-2`,bins:["C-2"],carts:["C"],HSC:`69072`,VendorItemID:`5-22108`,REF:``},
+  {name:`ETT NASAL RAE (UNCUFFED) (4.5 mm)`,location:`C-2`,bins:["C-2"],carts:["C"],HSC:`69073`,VendorItemID:`5-22109`,REF:``},
+  {name:`ETT NASAL RAE (UNCUFFED) (5.0 mm)`,location:`C-2`,bins:["C-2"],carts:["C"],HSC:`69074`,VendorItemID:`5-22110`,REF:``},
+  {name:`ETT NASAL RAE (UNCUFFED) (5.5 mm)`,location:`C-2`,bins:["C-2"],carts:["C"],HSC:`72333`,VendorItemID:`5-22111`,REF:``},
+  {name:`ETT NASAL RAE (UNCUFFED) (6.0 mm)`,location:`C-2`,bins:["C-2"],carts:["C"],HSC:`69076`,VendorItemID:`5-22112`,REF:``},
+  {name:`ETT ORAL RAE (CUFFED) (3.5 mm)`,location:`C-3`,bins:["C-3"],carts:["C"],HSC:`50297`,VendorItemID:`35162`,REF:``},
+  {name:`ETT ORAL RAE (CUFFED) (4.0 mm)`,location:`C-3`,bins:["C-3"],carts:["C"],HSC:`50298`,VendorItemID:`35163`,REF:``},
+  {name:`ETT ORAL RAE (CUFFED) (4.5 mm)`,location:`C-3`,bins:["C-3"],carts:["C"],HSC:`50299`,VendorItemID:`35164JT`,REF:``},
+  {name:`ETT ORAL RAE (CUFFED) (5.0 mm)`,location:`C-3`,bins:["C-3"],carts:["C"],HSC:`39633`,VendorItemID:`76251`,REF:``},
+  {name:`ETT ORAL RAE (CUFFED) (5.5 mm)`,location:`C-3`,bins:["C-3"],carts:["C"],HSC:`39634`,VendorItemID:`76255`,REF:``},
+  {name:`ETT ORAL RAE (CUFFED) (6.0 mm)`,location:`C-3`,bins:["C-3"],carts:["C"],HSC:`471`,VendorItemID:`76260`,REF:``},
+  {name:`ETT ORAL RAE (CUFFED) (6.5 mm)`,location:`C-3`,bins:["C-3"],carts:["C"],HSC:`472`,VendorItemID:`76265`,REF:``},
+  {name:`ETT ORAL RAE (CUFFED) (7.0 mm)`,location:`C-3`,bins:["C-3"],carts:["C"],HSC:`473`,VendorItemID:`76270`,REF:``},
+  {name:`ETT ORAL RAE (CUFFED) (7.5 mm)`,location:`C-3`,bins:["C-3"],carts:["C"],HSC:`474`,VendorItemID:`76275`,REF:``},
+  {name:`ETT ORAL RAE (CUFFED) (8.0 mm)`,location:`C-3`,bins:["C-3"],carts:["C"],HSC:`642`,VendorItemID:`76280`,REF:``},
+  {name:`ETT ORAL RAE (CUFFED) (8.5 mm)`,location:`C-3`,bins:["C-3"],carts:["C"],HSC:`643`,VendorItemID:`76285`,REF:``},
+  {name:`ETT ORAL RAE (UNCUFFED) (3.0 mm)`,location:`C-2`,bins:["C-2"],carts:["C"],HSC:`69064`,VendorItemID:`5-22006`,REF:``},
+  {name:`ETT ORAL RAE (UNCUFFED) (3.5 mm)`,location:`C-2`,bins:["C-2"],carts:["C"],HSC:`69065`,VendorItemID:`5-22007`,REF:``},
+  {name:`ETT ORAL RAE (UNCUFFED) (4.0 mm)`,location:`C-2`,bins:["C-2"],carts:["C"],HSC:`72332`,VendorItemID:`5-22008`,REF:``},
+  {name:`ETT ORAL RAE (UNCUFFED) (4.5 mm)`,location:`C-2`,bins:["C-2"],carts:["C"],HSC:`69067`,VendorItemID:`5-22009`,REF:``},
+  {name:`ETT ORAL RAE (UNCUFFED) (5.0 mm)`,location:`C-2`,bins:["C-2"],carts:["C"],HSC:`69068`,VendorItemID:`5-22010`,REF:``},
+  {name:`EXT SET (TRANLUCENT) (6")`,location:`H-4`,bins:["H-4"],carts:["H"],HSC:`62900`,VendorItemID:`I88424080411`,REF:``},
+  {name:`EXT. SET (LARGE BORE)`,location:`J-1`,bins:["J-1"],carts:["J"],HSC:`3937`,VendorItemID:`10-1044`,REF:``},
+  {name:`EZ-IO DRILL SET`,location:`I-7`,bins:["I-7"],carts:["I"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+  {name:`EZ-IO NEEDLE SET (>3 Kg) (15 G x 25 mm)`,location:`I-7`,bins:["I-7"],carts:["I"],HSC:`54882`,VendorItemID:`9001-VC-005`,REF:``},
+  {name:`EZ-IO NEEDLE SET (>40 Kg) (15 G x 45 mm)`,location:`I-7`,bins:["I-7"],carts:["I"],HSC:`65409`,VendorItemID:`9079-VC-005`,REF:``},
+  {name:`EZ-IO NEEDLE SET (3-39 Kg) (15 G x 15 mm)`,location:`I-7`,bins:["I-7"],carts:["I"],HSC:`48185`,VendorItemID:`9018-VC-005`,REF:``},
+  {name:`FEMALE CONNECTOR (DOUBLE)`,location:`H-6`,bins:["H-6"],carts:["H"],HSC:`1884`,VendorItemID:`040183000A`,REF:``},
+  {name:`FLEXIBLE CONNECTOR`,location:`D-5`,bins:["D-5"],carts:["D"],HSC:`50056`,VendorItemID:`I2835040000`,REF:``},
+  {name:`GAS MACHINE BREATHING ASSEMBLY`,location:`A-1`,bins:["A-1"],carts:["A"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+  {name:`GAUZE (NON-STERILE) (LARGE) (4" x 4")`,location:`I-6`,bins:["I-6"],carts:["I"],HSC:`60804`,VendorItemID:`DUP94144`,REF:``},
+  {name:`GLIDESCOPE BLADE (MAC 3)`,location:`B-3`,bins:["B-3"],carts:["B"],HSC:`78752`,VendorItemID:`0270-1085`,REF:``},
+  {name:`GLIDESCOPE BLADE (MILLER 1)`,location:`B-3`,bins:["B-3"],carts:["B"],HSC:`78751`,VendorItemID:`0270-1088`,REF:``},
+  {name:`GLIDESCOPE BLADE (Sz. 1.0)`,location:`B-3`,bins:["B-3"],carts:["B"],HSC:`71827`,VendorItemID:`0270-0876`,REF:``},
+  {name:`GLIDESCOPE BLADE (Sz. 2.0)`,location:`B-3`,bins:["B-3"],carts:["B"],HSC:`71828`,VendorItemID:`0270-0877`,REF:``},
+  {name:`GLIDESCOPE BLADE (Sz. 2.5)`,location:`B-3`,bins:["B-3"],carts:["B"],HSC:`71829`,VendorItemID:`0270-0962`,REF:``},
+  {name:`GLIDESCOPE BLADE (Sz. 3.0)`,location:`B-3`,bins:["B-3"],carts:["B"],HSC:`71830`,VendorItemID:`0270-0938`,REF:``},
+  {name:`GLIDESCOPE BLADE (Sz. 4.0)`,location:`B-3`,bins:["B-3"],carts:["B"],HSC:`71831`,VendorItemID:`0270-0939`,REF:``},
+  {name:`GUIDEWIRE (FIXED CORE) (0.015" x 20 cm)`,location:`I-8`,bins:["I-8"],carts:["I"],HSC:`16088`,VendorItemID:`G02230`,REF:``},
+  {name:`GUIDEWIRE (FIXED CORE) (0.018" x 50 cm)`,location:`I-8`,bins:["I-8"],carts:["I"],HSC:`4197`,VendorItemID:`G29182`,REF:``},
+  {name:`GUIDEWIRE (VASCULAR SPRING) (0.018" x 5-3/8")`,location:`I-8`,bins:["I-8"],carts:["I"],HSC:`31088`,VendorItemID:`RW-04018`,REF:``},
+  {name:`HEAD HARNESS (ADULT)`,location:`B-8`,bins:["B-8"],carts:["B"],HSC:`71304`,VendorItemID:`9912001`,REF:``},
+  {name:`HEAD HARNESS (CHILD)`,location:`B-8`,bins:["B-8"],carts:["B"],HSC:`71305`,VendorItemID:`9912000`,REF:``},
+  {name:`HMEF FILTER (<10 KG)`,location:`A-3`,bins:["A-3"],carts:["A"],HSC:`70947`,VendorItemID:`1441000`,REF:``},
+  {name:`HMEF FILTER (>10 KG)`,location:`A-4`,bins:["A-4"],carts:["A"],HSC:`70946`,VendorItemID:`1831000`,REF:``},
+  {name:`HMEF MECHANICAL FILTER (EXPIRATORY LIMB)`,location:`A-5`,bins:["A-5"],carts:["A"],HSC:`62344`,VendorItemID:`351-5979`,REF:``},
+  {name:`INLINE CO2 SAMPLING (INFANT)`,location:`G-6`,bins:["G-6"],carts:["G"],HSC:`57522`,VendorItemID:`MVIIHH`,REF:``},
+  {name:`INLINE CO2 SAMPLING (PAEDS/ADULT)`,location:`G-6`,bins:["G-6"],carts:["G"],HSC:`55049`,VendorItemID:`MVAIH100U`,REF:``},
+  {name:`INTUBATING INTRODUCER (FROVA) (14 Fr)`,location:`D6-A-1`,bins:["D6-A-1"],carts:["D"],HSC:`43688`,VendorItemID:`G23646`,REF:``},
+  {name:`INVASIVE BP CABLE`,location:`H-1`,bins:["H-1"],carts:["H"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+  {name:`INVASIVE BP SPLITTER`,location:`H-1`,bins:["H-1"],carts:["H"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+  {name:`ISO FILLING ADAPTER`,location:`A-2`,bins:["A-2"],carts:["A"],HSC:`61071`,VendorItemID:`M36110`,REF:``},
+  {name:`IV CAP (WHITE) (CVL)`,location:`J-1`,bins:["J-1"],carts:["J"],HSC:`1700`,VendorItemID:`10-1005`,REF:``},
+  {name:`IV CATH ANGIO (BLUE) (22 G x 1") (SHORT)`,location:`I-5`,bins:["I-5"],carts:["I"],HSC:`72486`,VendorItemID:`BD381123`,REF:``},
+  {name:`IV CATH ANGIO (GREEN) (18 G x 1.16") (NON-SAFETY) (SHORT)`,location:`I-5`,bins:["I-5"],carts:["I"],HSC:`54319`,VendorItemID:`BD381144`,REF:``},
+  {name:`IV CATH ANGIO (PINK) (20 G x 1.16") (NON-SAFETY) (SHORT)`,location:`I-5`,bins:["I-5"],carts:["I"],HSC:`64492`,VendorItemID:`BD381134`,REF:``},
+  {name:`IV CATH ANGIO (PINK) (20 G x 1.88") (NON-SAFETY) (LONG)`,location:`I-4`,bins:["I-4"],carts:["I"],HSC:`50270`,VendorItemID:`BD381137`,REF:``},
+  {name:`IV CATH ANGIO (YELLOW) (24 G x 0.75") (NON-SAFETY) (SHORT)`,location:`I-5`,bins:["I-5"],carts:["I"],HSC:`50267`,VendorItemID:`BD381112`,REF:``},
+  {name:`IV CATH INTROCAN (BLUE) (22 G x 1") (SAFETY) (SHORT)`,location:`I-4`,bins:["I-4"],carts:["I"],HSC:`50250`,VendorItemID:`BB4252519-02`,REF:``},
+  {name:`IV CATH INTROCAN (BLUE) (22 G x 1.75") (SAFETY) (LONG)`,location:`I-3`,bins:["I-3"],carts:["I"],HSC:`65536`,VendorItemID:`BB4252520-02`,REF:``},
+  {name:`IV CATH INTROCAN (GREEN) (18 G x 1.25") (SAFETY) (SHORT)`,location:`I-4`,bins:["I-4"],carts:["I"],HSC:`50254`,VendorItemID:`BB4252560-02`,REF:``},
+  {name:`IV CATH INTROCAN (GREEN) (18 G x 1.75") (SAFETY) (LONG)`,location:`I-3`,bins:["I-3"],carts:["I"],HSC:`50256`,VendorItemID:`BB4252551-02`,REF:``},
+  {name:`IV CATH INTROCAN (GREY) (16 G x 1.25") (SAFETY) (SHORT)`,location:`I-4`,bins:["I-4"],carts:["I"],HSC:`50258`,VendorItemID:`BB4252586-02`,REF:``},
+  {name:`IV CATH INTROCAN (GREY) (16 G x 2") (SAFETY) (LONG)`,location:`I-3`,bins:["I-3"],carts:["I"],HSC:`50257`,VendorItemID:`BB4252578-02`,REF:``},
+  {name:`IV CATH INTROCAN (ORANGE) (14 G x 1.25") (SAFETY) (SHORT)`,location:`I-4`,bins:["I-4"],carts:["I"],HSC:`50260`,VendorItemID:`BB4251890-02`,REF:``},
+  {name:`IV CATH INTROCAN (ORANGE) (14 G x 2") (SAFETY) (LONG)`,location:`I-3`,bins:["I-3"],carts:["I"],HSC:`50259`,VendorItemID:`BB4252594-02`,REF:``},
+  {name:`IV CATH INTROCAN (PINK) (20 G x 1.25") (SAFETY) (SHORT)`,location:`I-4`,bins:["I-4"],carts:["I"],HSC:`50252`,VendorItemID:`BB4252535-02`,REF:``},
+  {name:`IV CATH INTROCAN (PINK) (20 G x 1.75") (SAFETY) (LONG)`,location:`I-3`,bins:["I-3"],carts:["I"],HSC:`50253`,VendorItemID:`BB4252527-02`,REF:``},
+  {name:`IV CATH INTROCAN (YELLOW) (24 G x 0.55") (SAFETY) (SHORT)`,location:`I-3`,bins:["I-3"],carts:["I"],HSC:`50249`,VendorItemID:`BB4252511-02`,REF:``},
+  {name:`IV CATH INTROCAN (YELLOW) (24 G x 0.75") (SAFETY)`,location:`I-4`,bins:["I-4"],carts:["I"],HSC:`50248`,VendorItemID:`BB4252500-02`,REF:``},
+  {name:`LABEL ROLL (SLS 500I)`,location:`F-1`,bins:["F-1"],carts:["F"],HSC:`64349`,VendorItemID:`SLS500-SLX33`,REF:``},
+  {name:`LARYNGOSCOPE HANDLE (NEONATAL)`,location:`C-6`,bins:["C-6"],carts:["C"],HSC:`SPACE ONLY`,VendorItemID:`F-000.22.804`,REF:``},
+  {name:`LARYNGOSCOPE HANDLE (STANDARD)`,location:`C-6`,bins:["C-6"],carts:["C"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+  {name:`LARYNGO-TRACHAEL ATOMIZER`,location:`D-6`,bins:["D-6"],carts:["D"],HSC:`50275`,VendorItemID:`700LTAD-L7`,REF:``},
+  {name:`LENS CLEANSER (ANTI-FOG)`,location:`D-4`,bins:["D-4"],carts:["D"],HSC:`6612`,VendorItemID:`C56-121`,REF:``},
+  {name:`LMA (FLEXIBLE) (Sz. 2.0)`,location:`B-1`,bins:["B-1"],carts:["B"],HSC:`47455`,VendorItemID:`327200000`,REF:``},
+  {name:`LMA (FLEXIBLE) (Sz. 2.5)`,location:`B-1`,bins:["B-1"],carts:["B"],HSC:`47456`,VendorItemID:`327250000`,REF:``},
+  {name:`LMA (FLEXIBLE) (Sz. 3.0)`,location:`B-1`,bins:["B-1"],carts:["B"],HSC:`47457`,VendorItemID:`327300000`,REF:``},
+  {name:`LMA (FLEXIBLE) (Sz. 4.0)`,location:`B-1`,bins:["B-1"],carts:["B"],HSC:`47458`,VendorItemID:`327400000`,REF:``},
+  {name:`LMA (Sz. 1.0)`,location:`B-2`,bins:["B-2"],carts:["B"],HSC:`43963`,VendorItemID:`329 100 000`,REF:``},
+  {name:`LMA (Sz. 1.5)`,location:`B-2`,bins:["B-2"],carts:["B"],HSC:`43964`,VendorItemID:`329 150 000`,REF:``},
+  {name:`LMA (Sz. 2.0)`,location:`B-2`,bins:["B-2"],carts:["B"],HSC:`43965`,VendorItemID:`329 200 000`,REF:``},
+  {name:`LMA (Sz. 2.5)`,location:`B-2`,bins:["B-2"],carts:["B"],HSC:`43966`,VendorItemID:`329 250 000`,REF:``},
+  {name:`LMA (Sz. 3.0)`,location:`B-1`,bins:["B-1"],carts:["B"],HSC:`43967`,VendorItemID:`329 300 000`,REF:``},
+  {name:`LMA (Sz. 4.0)`,location:`B-1`,bins:["B-1"],carts:["B"],HSC:`43968`,VendorItemID:`329 400 000`,REF:``},
+  {name:`LMA (Sz. 5.0)`,location:`B-1`,bins:["B-1"],carts:["B"],HSC:`78201`,VendorItemID:`329500000`,REF:``},
+  {name:`LOCKIT SECUREMENT DEVICE`,location:`E-2`,bins:["E-2"],carts:["E"],HSC:`56728`,VendorItemID:`100/399/218`,REF:``},
+  {name:`LUBRICANT (180 ml)`,location:`D-8`,bins:["D-8"],carts:["D"],HSC:`79308`,VendorItemID:`252090`,REF:``},
+  {name:`LUBRICANT JELLY`,location:`D-8`,bins:["D-8"],carts:["D"],HSC:`60845`,VendorItemID:`SM1322N`,REF:``},
+  {name:`MAC BLADE (Sz. 1)`,location:`C-6`,bins:["C-6"],carts:["C"],HSC:`SPACE ONLY`,VendorItemID:`ANS-01-10030`,REF:``},
+  {name:`MAC BLADE (Sz. 2)`,location:`C-6`,bins:["C-6"],carts:["C"],HSC:`SPACE ONLY`,VendorItemID:`ANS-01-10022`,REF:``},
+  {name:`MAC BLADE (Sz. 3)`,location:`C-6`,bins:["C-6"],carts:["C"],HSC:`SPACE ONLY`,VendorItemID:`ANS-01-10023`,REF:``},
+  {name:`MAC BLADE (Sz. 4)`,location:`C-6`,bins:["C-6"],carts:["C"],HSC:`SPACE ONLY`,VendorItemID:`ANS-01-10024`,REF:``},
+  {name:`MAD (ATOMIZER) (NASAL)`,location:`D-6`,bins:["D-6"],carts:["D"],HSC:`54912`,VendorItemID:`300LTAD-N3`,REF:``},
+  {name:`MAGILL FORCEP (LARGE)`,location:`C-5`,bins:["C-5"],carts:["C"],HSC:`SPACE ONLY`,VendorItemID:`ANS-01-10046`,REF:``},
+  {name:`MAGILL FORCEP (MEDIUM)`,location:`C-5`,bins:["C-5"],carts:["C"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+  {name:`MAGILL FORCEP (SMALL)`,location:`C-5`,bins:["C-5"],carts:["C"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+  {name:`MALE CONNECTOR (DOUBLE)`,location:`H-6`,bins:["H-6"],carts:["H"],HSC:`1699`,VendorItemID:`MX493JT`,REF:``},
+  {name:`MASK (BVM) (INFLATABLE) (BLUE) (INFANT) (Sz. 1)`,location:`B-7`,bins:["B-7"],carts:["B"],HSC:`64341`,VendorItemID:`OL-081110-00`,REF:``},
+  {name:`MASK (BVM) (INFLATABLE) (GREEN) (ADULT) (SMALL) (Sz. 3)`,location:`B-6`,bins:["B-6"],carts:["B"],HSC:`64342`,VendorItemID:`OL-081130-00`,REF:``},
+  {name:`MASK (BVM) (INFLATABLE) (RED) (ADULT) (LARGE) (Sz. 5)`,location:`B-4`,bins:["B-4"],carts:["B"],HSC:`64456`,VendorItemID:`OL-081150-00`,REF:``},
+  {name:`MASK (BVM) (INFLATABLE) (WHITE) (CHILD) (Sz. 2)`,location:`B-7`,bins:["B-7"],carts:["B"],HSC:`64344`,VendorItemID:`OL-081120-00`,REF:``},
+  {name:`MASK (BVM) (INFLATABLE) (YELLOW) (ADULT) (MEDIUM) (Sz. 4)`,location:`B-5`,bins:["B-5"],carts:["B"],HSC:`64343`,VendorItemID:`OL-081140-00`,REF:``},
+  {name:`MASK (INFANT) (Sz. 2)`,location:`B-8`,bins:["B-8"],carts:["B"],HSC:`64348`,VendorItemID:`INFMASK2`,REF:``},
+  {name:`MASK (NEONATE) (Sz. 1)`,location:`B-8`,bins:["B-8"],carts:["B"],HSC:`64347`,VendorItemID:`NEOMASK1`,REF:``},
+  {name:`MASK (ORANGE) (ADULT) (Sz. 6)`,location:`B-4`,bins:["B-4"],carts:["B"],HSC:`64345`,VendorItemID:`OL-081160-00`,REF:``},
+  {name:`MASK (PREEMIE) (Sz. 0)`,location:`B-8`,bins:["B-8"],carts:["B"],HSC:`64346`,VendorItemID:`PREMASK0`,REF:``},
+  {name:`MASK FLAVOR (BUBBLEGUM)`,location:`C-1`,bins:["C-1"],carts:["C"],HSC:`53004`,VendorItemID:`BBL-GUM`,REF:``},
+  {name:`MASK FLAVOR (ORANGE)`,location:`C-1`,bins:["C-1"],carts:["C"],HSC:`7613`,VendorItemID:`L0060`,REF:``},
+  {name:`MASK FLAVOR (STRAWBERRY)`,location:`C-1`,bins:["C-1"],carts:["C"],HSC:`7614`,VendorItemID:`L0320`,REF:``},
+  {name:`MASK FLAVOR (WATERMELON)`,location:`C-1`,bins:["C-1"],carts:["C"],HSC:`7612`,VendorItemID:`L0260`,REF:``},
+  {name:`MASTISOL STICK (2/3 ml)`,location:`I-5`,bins:["I-5"],carts:["I"],HSC:`10348`,VendorItemID:`RGR3006-48`,REF:``},
+  {name:`MATTRESS WARMER (INFANT)`,location:`H-2`,bins:["H-2"],carts:["H"],HSC:`69946`,VendorItemID:`MDS1017`,REF:``},
+  {name:`MCGRATH MAC (Sz. 1)`,location:`B-9`,bins:["B-9"],carts:["B"],HSC:`71300`,VendorItemID:`350-072-000`,REF:``},
+  {name:`MCGRATH MAC (Sz. 2)`,location:`B-9`,bins:["B-9"],carts:["B"],HSC:`71301`,VendorItemID:`350-017-000`,REF:``},
+  {name:`MCGRATH MAC (Sz. 3)`,location:`B-9`,bins:["B-9"],carts:["B"],HSC:`71302`,VendorItemID:`350-005-000`,REF:``},
+  {name:`MCGRATH MAC-X (Sz. 3)`,location:`B-9`,bins:["B-9"],carts:["B"],HSC:`71303`,VendorItemID:`X3-003-000`,REF:``},
+  {name:`MDRD KIDNEY BASIN`,location:`H-1`,bins:["H-1"],carts:["H"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+  {name:`MEDICATION ADDED LABEL`,location:`F-1`,bins:["F-1"],carts:["F"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+  {name:`MEMO PADS`,location:`F-1`,bins:["F-1"],carts:["F"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+  {name:`METERED DOSE INHALER ADAPTER`,location:`G-5`,bins:["G-5"],carts:["G"],HSC:`43970`,VendorItemID:`RTC 15-D`,REF:``},
+  {name:`MH VAPOR FILTER`,location:`A-3`,bins:["A-3"],carts:["A"],HSC:`56802`,VendorItemID:`VC101`,REF:``},
+  {name:`MICROCLAVE CONNECTOR`,location:`J-3`,bins:["J-3"],carts:["J"],HSC:`60244`,VendorItemID:`ICMC100`,REF:``},
+  {name:`MICRON FILTER (0.2 MICRON)(PEADS)`,location:`H-3`,bins:["H-3"],carts:["H"],HSC:`60243`,VendorItemID:`ICB6008`,REF:``},
+  {name:`MICRON FILTER (1.2)`,location:`H-3`,bins:["H-3"],carts:["H"],HSC:`62951`,VendorItemID:`AL10012866`,REF:``},
+  {name:`MIE (NON-REBREATHER CIRCUIT) (1000 ml)`,location:`G-8`,bins:["G-8"],carts:["G"],HSC:`64694`,VendorItemID:`OL-609806-40`,REF:``},
+  {name:`MIE (NON-REBREATHER CIRCUIT) (500 ml)`,location:`G-8`,bins:["G-8"],carts:["G"],HSC:`64695`,VendorItemID:`OL-609806-39`,REF:``},
+  {name:`MILLER (Sz. 0)`,location:`C-6`,bins:["C-6"],carts:["C"],HSC:`SPACE ONLY`,VendorItemID:`ANS-01-10027`,REF:``},
+  {name:`MILLER (Sz. 00)`,location:`C-6`,bins:["C-6"],carts:["C"],HSC:`44610`,VendorItemID:`799-F-000.22.119`,REF:``},
+  {name:`N.S. FLUSH (10 ml)`,location:`I-9`,bins:["I-9"],carts:["I"],HSC:`38983`,VendorItemID:`BD306547`,REF:``},
+  {name:`NASAL AIRWAY (NPT) (6 mm)`,location:`B-8`,bins:["B-8"],carts:["B"],HSC:`824`,VendorItemID:`SIM340060`,REF:``},
+  {name:`NASAL AIRWAY (NPT) (7 mm)`,location:`B-8`,bins:["B-8"],carts:["B"],HSC:`825`,VendorItemID:`SIM340070`,REF:``},
+  {name:`NASAL AIRWAY (NPT) (8 mm)`,location:`B-8`,bins:["B-8"],carts:["B"],HSC:`826`,VendorItemID:`SIM340080`,REF:``},
+  {name:`NASAL AIRWAY (NPT) (9 mm)`,location:`B-8`,bins:["B-8"],carts:["B"],HSC:`827`,VendorItemID:`625-340090`,REF:``},
+  {name:`NASAL AIRWAY w/ADJ FLANGE (NPT) (12 Fr)`,location:`C-9`,bins:["C-9"],carts:["C"],HSC:`42777`,VendorItemID:`18542012`,REF:``},
+  {name:`NASAL AIRWAY w/ADJ FLANGE (NPT) (14 Fr)`,location:`C-9`,bins:["C-9"],carts:["C"],HSC:`42772`,VendorItemID:`18542014`,REF:``},
+  {name:`NASAL AIRWAY w/ADJ FLANGE (NPT) (16 Fr)`,location:`C-9`,bins:["C-9"],carts:["C"],HSC:`42770`,VendorItemID:`18542016`,REF:``},
+  {name:`NASAL AIRWAY w/ADJ FLANGE (NPT) (18 Fr)`,location:`C-9`,bins:["C-9"],carts:["C"],HSC:`42769`,VendorItemID:`18542018`,REF:``},
+  {name:`NASAL AIRWAY w/ADJ FLANGE (NPT) (20 Fr)`,location:`C-9`,bins:["C-9"],carts:["C"],HSC:`42765`,VendorItemID:`18542020`,REF:``},
+  {name:`NASAL AIRWAY w/ADJ FLANGE (NPT) (22 Fr)`,location:`C-9`,bins:["C-9"],carts:["C"],HSC:`72294`,VendorItemID:`18542022`,REF:``},
+  {name:`NASAL AIRWAY w/ADJ FLANGE (NPT) (24 Fr)`,location:`C-9`,bins:["C-9"],carts:["C"],HSC:`43501`,VendorItemID:`18542024`,REF:``},
+  {name:`NASAL AIRWAY w/ADJ FLANGE (NPT) (26 Fr)`,location:`C-9`,bins:["C-9"],carts:["C"],HSC:`72295`,VendorItemID:`18542026`,REF:``},
+  {name:`NASAL CANNULA w/ETCO2 (ADULT)`,location:`G-5`,bins:["G-5"],carts:["G"],HSC:`72300`,VendorItemID:`4706F-7-0-25`,REF:``},
+  {name:`NASAL CANNULA w/ETCO2 (INFANT)`,location:`G-5`,bins:["G-5"],carts:["G"],HSC:`48305`,VendorItemID:`4701F-7-0-25`,REF:``},
+  {name:`NASAL CANNULA w/ETCO2 (PAEDS)`,location:`G-5`,bins:["G-5"],carts:["G"],HSC:`57692`,VendorItemID:`S104702F25`,REF:``},
+  {name:`NEBULIZER (GREEN)`,location:`G-6`,bins:["G-6"],carts:["G"],HSC:`31225`,VendorItemID:`1730JT`,REF:``},
+  {name:`NEEDLE (CAUDAL) (22 G x 1-3/8")`,location:`E-7`,bins:["E-7"],carts:["E"],HSC:`53332`,VendorItemID:`332177`,REF:``},
+  {name:`NEEDLE (EPIDURAL) (18 G x 4.75")`,location:`E-3`,bins:["E-3"],carts:["E"],HSC:`69928`,VendorItemID:`332186`,REF:``},
+  {name:`NEEDLE (HYPODERMIC) (23 G x 1")`,location:`I-3`,bins:["I-3"],carts:["I"],HSC:`2417`,VendorItemID:`BD305902`,REF:``},
+  {name:`NEEDLE (HYPODERMIC) (25 G x 5/8")`,location:`I-3`,bins:["I-3"],carts:["I"],HSC:`2176`,VendorItemID:`BD305901`,REF:``},
+  {name:`NEEDLE (HYPODERMIC) (27 G x 5/8")`,location:`I-3`,bins:["I-3"],carts:["I"],HSC:`2177`,VendorItemID:`BD305921`,REF:``},
+  {name:`NEEDLE (SPINAL) (25 G x 1")`,location:`E-7`,bins:["E-7"],carts:["E"],HSC:`55825`,VendorItemID:`NSV405073`,REF:``},
+  {name:`NEEDLE (SPINAL) (INTRODUCER) (20 G x 1.25")`,location:`E-7`,bins:["E-7"],carts:["E"],HSC:`55654`,VendorItemID:`80-6015`,REF:``},
+  {name:`NEEDLE (SPINAL) (WHITACRE) (25 G x 3.5")`,location:`E-7`,bins:["E-7"],carts:["E"],HSC:`64497`,VendorItemID:`NSV405138`,REF:``},
+  {name:`NEEDLE (SPINAL) (WHITACRE) (25 G x 5")`,location:`E-7`,bins:["E-7"],carts:["E"],HSC:`69311`,VendorItemID:`405140`,REF:``},
+  {name:`NEEDLE (TUOHY) (18 G x 3.5")`,location:`E-3`,bins:["E-3"],carts:["E"],HSC:`30053`,VendorItemID:`183A07`,REF:``},
+  {name:`NEEDLELESS ACCESS DEVICE (IV BAG SPIKE)`,location:`H-6`,bins:["H-6"],carts:["H"],HSC:`35737`,VendorItemID:`ICCS-10`,REF:``},
+  {name:`NEONATAL EPIDURAL TRAY (20 G)`,location:`E-1`,bins:["E-1"],carts:["E"],HSC:`43956`,VendorItemID:`179-4990-20/24`,REF:``},
+  {name:`NEONATAL TRAY`,location:`C-1`,bins:["C-1"],carts:["C"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+  {name:`NERVE BLOCK (19 G)`,location:`E-4`,bins:["E-4"],carts:["E"],HSC:`78241`,VendorItemID:`AB-19608-S`,REF:``},
+  {name:`NERVE BLOCK (20 G)`,location:`E-4`,bins:["E-4"],carts:["E"],HSC:`78242`,VendorItemID:`AB-20604-S`,REF:``},
+  {name:`NERVE STIM`,location:`F-2`,bins:["F-2"],carts:["F"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+  {name:`NORMAL SALINE (10 ml VIAL)`,location:`H-3`,bins:["H-3"],carts:["H"],HSC:`79016`,VendorItemID:`L0010001`,REF:``},
+  {name:`O2 REPLACEMENT STICKER (INFANT)`,location:`F-4`,bins:["F-4"],carts:["F"],HSC:`72924`,VendorItemID:`4046JIT`,REF:``},
+  {name:`O2 REPLACEMENT STICKER (NEO/ADULT)`,location:`F-4`,bins:["F-4"],carts:["F"],HSC:`72931`,VendorItemID:`4674`,REF:``},
+  {name:`O2 SENSOR (< 3 KG OR > 4 KG) (PURPLE) (NEO/ADULT)`,location:`F-5`,bins:["F-5"],carts:["F"],HSC:`72921`,VendorItemID:`4003JIT`,REF:``},
+  {name:`O2 SENSOR (10-50 KG) (PINK) (PAEDS)`,location:`F-5`,bins:["F-5"],carts:["F"],HSC:`72919`,VendorItemID:`4001JIT`,REF:``},
+  {name:`O2 SENSOR (3-20 KG) (YELLOW) (INFANT)`,location:`F-5`,bins:["F-5"],carts:["F"],HSC:`72920`,VendorItemID:`4002JIT`,REF:``},
+  {name:`O2 TUBING (STANDARD) (7 Ft)`,location:`G-6`,bins:["G-6"],carts:["G"],HSC:`1243`,VendorItemID:`1115`,REF:``},
+  {name:`O3 SENSOR (MASIMO) (ADULT)`,location:`F-3`,bins:["F-3"],carts:["F"],HSC:`69976`,VendorItemID:`3756`,REF:``},
+  {name:`O3 SENSOR (MASIMO) (PAEDS)`,location:`F-3`,bins:["F-3"],carts:["F"],HSC:`69977`,VendorItemID:`4235`,REF:``},
+  {name:`O3 SENSOR (REGIONAL) (NEONATAL-INFANT)`,location:`F-3`,bins:["F-3"],carts:["F"],HSC:`72965`,VendorItemID:`4384JIT`,REF:``},
+  {name:`ORAL AIRWAY (BLACK) (60 mm)`,location:`B-6`,bins:["B-6"],carts:["B"],HSC:`3837`,VendorItemID:`991-2106-CA`,REF:``},
+  {name:`ORAL AIRWAY (BLUE) (50 mm)`,location:`B-6`,bins:["B-6"],carts:["B"],HSC:`3838`,VendorItemID:`991-2105-CA`,REF:``},
+  {name:`ORAL AIRWAY (GREEN) (80 mm)`,location:`B-5`,bins:["B-5"],carts:["B"],HSC:`577`,VendorItemID:`991-2108-CA`,REF:``},
+  {name:`ORAL AIRWAY (PINK) (40 mm)`,location:`B-7`,bins:["B-7"],carts:["B"],HSC:`3839`,VendorItemID:`991-2104-CA`,REF:``},
+  {name:`ORAL AIRWAY (RED) (100 mm)`,location:`B-4`,bins:["B-4"],carts:["B"],HSC:`72302`,VendorItemID:`991-2110-CA`,REF:``},
+  {name:`ORAL AIRWAY (WHITE) (70 mm)`,location:`B-5`,bins:["B-5"],carts:["B"],HSC:`3835`,VendorItemID:`991-2107-CA`,REF:``},
+  {name:`ORAL AIRWAY (YELLOW) (90 mm)`,location:`B-4`,bins:["B-4"],carts:["B"],HSC:`3836`,VendorItemID:`991-2109-CA`,REF:``},
+  {name:`PATIENT SAFETY STRAPS (4")`,location:`H-2`,bins:["H-2"],carts:["H"],HSC:`32789`,VendorItemID:`470-110-0027`,REF:``},
+  {name:`PENCIL`,location:`F-1`,bins:["F-1"],carts:["F"],HSC:`SPACE ONLY`,VendorItemID:`X14259`,REF:``},
+  {name:`PILOT BALLON REPAIR KIT`,location:`D-4`,bins:["D-4"],carts:["D"],HSC:`64489`,VendorItemID:`BE 409`,REF:``},
+  {name:`PLASMA-LYTE (1000 ml)`,location:`H-3`,bins:["H-3"],carts:["H"],HSC:`47079`,VendorItemID:`JB2544JIT`,REF:``},
+  {name:`PRECORDIAL STETHESCOPE SET`,location:`C-8`,bins:["C-8"],carts:["C"],HSC:`72441`,VendorItemID:`6-0025-05`,REF:``},
+  {name:`PRESSURE INFUSION BAG (500 ml)`,location:`H-5`,bins:["H-5"],carts:["H"],HSC:`60734`,VendorItemID:`V24IN800012`,REF:``},
+  {name:`PRESSURE MONITORING DOUBLE TRANSDUCER`,location:`H-4`,bins:["H-4"],carts:["H"],HSC:`72754`,VendorItemID:`T001709A`,REF:``},
+  {name:`PRESSURE MONITORING SINGLE TRANSDUCER`,location:`H-5`,bins:["H-5"],carts:["H"],HSC:`72749`,VendorItemID:`PXMK2041`,REF:``},
+  {name:`PRESSURE MONITORING TUBING`,location:`H-5`,bins:["H-5"],carts:["H"],HSC:`1245`,VendorItemID:`040106001A`,REF:``},
+  {name:`QUADFUSE`,location:`J-3`,bins:["J-3"],carts:["J"],HSC:`60182`,VendorItemID:`ICMC33688`,REF:``},
+  {name:`RAPID INFUSION CATHETER (RIC) (7 Fr x 5 cm)`,location:`J-9`,bins:["J-9"],carts:["J"],HSC:`39601`,VendorItemID:`RC-09700`,REF:``},
+  {name:`RAPID INFUSION CATHETER (RIC) (8 Fr x 6.4 cm)`,location:`J-9`,bins:["J-9"],carts:["J"],HSC:`39600`,VendorItemID:`RC-09850`,REF:``},
+  {name:`RAPID INFUSOR TUBING`,location:`H-9`,bins:["H-9"],carts:["H"],HSC:`69919`,VendorItemID:`903-00006P`,REF:``},
+  {name:`RED TAG`,location:`F-2`,bins:["F-2"],carts:["F"],HSC:`56927`,VendorItemID:`7901`,REF:``},
+  {name:`ROCHESTER CLAMPS`,location:`F-2`,bins:["F-2"],carts:["F"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+  {name:`SCALPEL (Sz. 15)`,location:`D-7`,bins:["D-7"],carts:["D"],HSC:`1017`,VendorItemID:`AS371615`,REF:``},
+  {name:`SCISSOR`,location:`F-2`,bins:["F-2"],carts:["F"],HSC:`1014`,VendorItemID:`635-570-108`,REF:``},
+  {name:`SENSOR SPIRILOG FLOW`,location:`A-1`,bins:["A-1"],carts:["A"],HSC:`61070`,VendorItemID:`8403735`,REF:``},
+  {name:`SIMPLE MASK (ADULT)`,location:`G-7`,bins:["G-7"],carts:["G"],HSC:`6821`,VendorItemID:`P001201`,REF:``},
+  {name:`SIMPLE MASK (PAEDS)`,location:`G-7`,bins:["G-7"],carts:["G"],HSC:`6820`,VendorItemID:`1042`,REF:``},
+  {name:`SKIN PREP GEL FOR EEG`,location:`G-1`,bins:["G-1"],carts:["G"],HSC:`53482`,VendorItemID:`122-736100`,REF:``},
+  {name:`SKIN TEMP PROBE (REUSABLE)`,location:`G-1`,bins:["G-1"],carts:["G"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:`nan`},
+  {name:`SPINAL ANESTHESIA KIT`,location:`E-6`,bins:["E-6"],carts:["E"],HSC:`74223`,VendorItemID:`80-9010`,REF:``},
+  {name:`SPO2 (REUSABLE) EAR SENSOR (ADULT) (>30 Kg)`,location:`F-2`,bins:["F-2"],carts:["F"],HSC:`72926`,VendorItemID:`4050`,REF:``},
+  {name:`SPO2 (REUSABLE) FINGER SENSOR (ADULT) (>30 Kg)`,location:`F-2`,bins:["F-2"],carts:["F"],HSC:`72930`,VendorItemID:`4055`,REF:``},
+  {name:`SPO2 (REUSABLE) FINGER SENSOR (PAEDS) (10 - 50 Kg)`,location:`F-2`,bins:["F-2"],carts:["F"],HSC:`72927`,VendorItemID:`4051JIT`,REF:``},
+  {name:`SPO2 (REUSABLE) FOREHEAD SENSOR (ADULT) (>30 Kg)`,location:`F-2`,bins:["F-2"],carts:["F"],HSC:`72928`,VendorItemID:`4053JIT`,REF:``},
+  {name:`STERILE WATER (10 ml VIAL)`,location:`H-2`,bins:["H-2"],carts:["H"],HSC:`79015`,VendorItemID:`L0010005`,REF:``},
+  {name:`STOPCOCK (4-WAY)`,location:`J-2`,bins:["J-2"],carts:["J"],HSC:`1878`,VendorItemID:`MX9341LSM`,REF:``},
+  {name:`STRAIGHT CONNECTOR (4.5-6 mm)`,location:`G-6`,bins:["G-6"],carts:["G"],HSC:`61640`,VendorItemID:`717670`,REF:``},
+  {name:`STRAIGHT GAS SAMPLING CONNECTOR`,location:`A-2`,bins:["A-2"],carts:["A"],HSC:`36262`,VendorItemID:`S225-3524804JT`,REF:``},
+  {name:`STRAIGHT/ TUBING CONNECTOR`,location:`G-4`,bins:["G-4"],carts:["G"],HSC:`616`,VendorItemID:`P354A`,REF:``},
+  {name:`STYLET (10 Fr)`,location:`C-9`,bins:["C-9"],carts:["C"],HSC:`3940`,VendorItemID:`85864`,REF:``},
+  {name:`STYLET (14 Fr)`,location:`C-9`,bins:["C-9"],carts:["C"],HSC:`1891`,VendorItemID:`85865`,REF:``},
+  {name:`STYLET (6 Fr)`,location:`C-9`,bins:["C-9"],carts:["C"],HSC:`1893`,VendorItemID:`85863`,REF:``},
+  {name:`STYLET ULTRA-SLIP (NEO)`,location:`C-9`,bins:["C-9"],carts:["C"],HSC:`66996`,VendorItemID:`V24S5000N`,REF:``},
+  {name:`SUCTION CATHETER (10 Fr)`,location:`D-9`,bins:["D-9"],carts:["D"],HSC:`731`,VendorItemID:`401021`,REF:``},
+  {name:`SUCTION CATHETER (12 Fr)`,location:`D-9`,bins:["D-9"],carts:["D"],HSC:`732`,VendorItemID:`401221`,REF:``},
+  {name:`SUCTION CATHETER (14 Fr)`,location:`D-9`,bins:["D-9"],carts:["D"],HSC:`733`,VendorItemID:`401421`,REF:``},
+  {name:`SUCTION CATHETER (6 Fr)`,location:`D-9`,bins:["D-9"],carts:["D"],HSC:`729`,VendorItemID:`50-1006JT`,REF:``},
+  {name:`SUCTION CATHETER (8 Fr)`,location:`D-9`,bins:["D-9"],carts:["D"],HSC:`730`,VendorItemID:`400821`,REF:``},
+  {name:`SUCTION LINER (1000 ml)`,location:`G-3`,bins:["G-3"],carts:["G"],HSC:`64468`,VendorItemID:`S2157157`,REF:``},
+  {name:`SUCTION TUBING w/TIP (120")`,location:`G-4`,bins:["G-4"],carts:["G"],HSC:`4175`,VendorItemID:`70-7620`,REF:`nan`},
+  {name:`SUCTION VALVE`,location:`D-8`,bins:["D-8"],carts:["D"],HSC:`28331`,VendorItemID:`MAJ-209JIT`,REF:`nan`},
+  {name:`SYRINGE (HEPARINIZED) (3 ml)`,location:`I-1`,bins:["I-1"],carts:["I"],HSC:`79136`,VendorItemID:`4042-2`,REF:`nan`},
+  {name:`SYRINGE (LEUR LOCK) (STERILE CAP)`,location:`J-4`,bins:["J-4"],carts:["J"],HSC:`6799`,VendorItemID:`SH-682101`,REF:`nan`},
+  {name:`SYRINGE (LOR GLASS)`,location:`E-1`,bins:["E-1"],carts:["E"],HSC:`60148`,VendorItemID:`179-4904`,REF:`nan`},
+  {name:`SYRINGE (LOR PLASTIC) (LUER SLIP) (7 ml)`,location:`E-1`,bins:["E-1"],carts:["E"],HSC:`30052`,VendorItemID:`4900`,REF:`nan`},
+  {name:`SYRINGE (LUER LOCK) (1 ml)`,location:`J-8`,bins:["J-8"],carts:["J"],HSC:`48299`,VendorItemID:`BD309628`,REF:`nan`},
+  {name:`SYRINGE (LUER LOCK) (10 ml)`,location:`J-7`,bins:["J-7"],carts:["J"],HSC:`2203`,VendorItemID:`BD302995`,REF:`nan`},
+  {name:`SYRINGE (LUER LOCK) (20 ml)`,location:`J-6`,bins:["J-6"],carts:["J"],HSC:`2204`,VendorItemID:`BD302830`,REF:`nan`},
+  {name:`SYRINGE (LUER LOCK) (3 ml)`,location:`J-8`,bins:["J-8"],carts:["J"],HSC:`53539`,VendorItemID:`BD309657`,REF:`nan`},
+  {name:`SYRINGE (LUER LOCK) (30 ml)`,location:`J-6`,bins:["J-6"],carts:["J"],HSC:`2206`,VendorItemID:`BD302832`,REF:`nan`},
+  {name:`SYRINGE (LUER LOCK) (5 ml)`,location:`J-7`,bins:["J-7"],carts:["J"],HSC:`2200`,VendorItemID:`BD309646`,REF:`nan`},
+  {name:`SYRINGE (LUER LOCK) (50 ml)`,location:`J-5`,bins:["J-5"],carts:["J"],HSC:`2193`,VendorItemID:`BD309653`,REF:`nan`},
+  {name:`SYRINGE SET TUBING (8")`,location:`J-3`,bins:["J-3"],carts:["J"],HSC:`60625`,VendorItemID:`ICMC9023`,REF:`nan`},
+  {name:`SYRINGE SET TUBING (MICROCLAVE) (72")`,location:`J-2`,bins:["J-2"],carts:["J"],HSC:`60362`,VendorItemID:`ICMC33782`,REF:`nan`},
+  {name:`SYRINGE TUBING (PRESSURE SENSING DISC)`,location:`J-1`,bins:["J-1"],carts:["J"],HSC:`48293`,VendorItemID:`AL10014914`,REF:`nan`},
+  {name:`TAPE (BROWN)`,location:`I-2`,bins:["I-2"],carts:["I"],HSC:`4153`,VendorItemID:`BSN7206902`,REF:`nan`},
+  {name:`TAPE (CLEAR) (1")`,location:`I-2`,bins:["I-2"],carts:["I"],HSC:`62229`,VendorItemID:`3M1527-1`,REF:`nan`},
+  {name:`TAPE (CLOTH) (1")`,location:`I-2`,bins:["I-2"],carts:["I"],HSC:`32724`,VendorItemID:`3M2861`,REF:`nan`},
+  {name:`TAPE (HOCKEY)`,location:`I-2`,bins:["I-2"],carts:["I"],HSC:`60861`,VendorItemID:`3M1538-1`,REF:`nan`},
+  {name:`TAPE (LEUKOTAPE) (3.8 cm x 13.7 m)`,location:`I-2`,bins:["I-2"],carts:["I"],HSC:`50057`,VendorItemID:`BSN7616800`,REF:`nan`},
+  {name:`TAPE (PAPER) (2")`,location:`I-2`,bins:["I-2"],carts:["I"],HSC:`858`,VendorItemID:`3M1530-2`,REF:`nan`},
+  {name:`TAPE (PINK) (WATERPROOF) (1")`,location:`I-2`,bins:["I-2"],carts:["I"],HSC:`60870`,VendorItemID:`BSN7235906`,REF:`nan`},
+  {name:`TAPE (STRAPPING) (4cm x 10 m)`,location:`I-2`,bins:["I-2"],carts:["I"],HSC:`60862`,VendorItemID:`BSN7149000`,REF:`nan`},
+  {name:`TAPE (SURGICAL) (1")`,location:`I-2`,bins:["I-2"],carts:["I"],HSC:`857`,VendorItemID:`3M1525-1`,REF:`nan`},
+  {name:`TEGADERM (ADVANCED) (SMALL) (2" x 2.25")`,location:`I-5`,bins:["I-5"],carts:["I"],HSC:`62969`,VendorItemID:`3M1682`,REF:`nan`},
+  {name:`TEGADERM (ADVANCED) (X-SMALL) (1.5" x 1.75")`,location:`I-5`,bins:["I-5"],carts:["I"],HSC:`62968`,VendorItemID:`3M1680`,REF:`nan`},
+  {name:`TEGADERM (LARGE) (4" x 4.75")`,location:`I-5`,bins:["I-5"],carts:["I"],HSC:`62221`,VendorItemID:`3M1626W`,REF:`nan`},
+  {name:`TEGADERM (SMALL) (2-3/8" x 2.75")`,location:`I-5`,bins:["I-5"],carts:["I"],HSC:`62220`,VendorItemID:`3M1624W`,REF:`nan`},
+  {name:`TEPMERATURE PROBE (GENERAL PURPOSE) (DEROYAL)`,location:`G-3`,bins:["G-3"],carts:["G"],HSC:`79244`,VendorItemID:`D-81-02S409`,REF:``},
+  {name:`TOURNIQUET IV`,location:`H-3`,bins:["H-3"],carts:["H"],HSC:`27081`,VendorItemID:`CH-6064`,REF:`nan`},
+  {name:`T-PIECE (W/PUSH-PORT)`,location:`J-5`,bins:["J-5"],carts:["J"],HSC:`60242`,VendorItemID:`ICA1001`,REF:`nan`},
+  {name:`TRIFUSE`,location:`J-4`,bins:["J-4"],carts:["J"],HSC:`60151`,VendorItemID:`ICMC33687`,REF:`nan`},
+  {name:`ULTRASOUND GEL (STERILE) (20 gm)`,location:`E-7`,bins:["E-7"],carts:["E"],HSC:`35586`,VendorItemID:`457-01-01`,REF:`nan`},
+  {name:`US PROBE COVER (18 cm x 120 cm)`,location:`H-7`,bins:["H-7"],carts:["H"],HSC:`50159`,VendorItemID:`32812`,REF:`nan`},
+  {name:`VIAL SPIKE (MULTI USE)`,location:`H-2`,bins:["H-2"],carts:["H"],HSC:`52874`,VendorItemID:`179-CH-70`,REF:`nan`},
+  {name:`WATERLOCK 2`,location:`A-1`,bins:["A-1"],carts:["A"],HSC:`72303`,VendorItemID:`6872020`,REF:`nan`},
+  {name:`WISCONSIN (Sz. 1)`,location:`C-6`,bins:["C-6"],carts:["C"],HSC:`SPACE ONLY`,VendorItemID:`ANS-01-10018`,REF:`nan`},
+  {name:`WISCONSIN (Sz. 2)`,location:`C-6`,bins:["C-6"],carts:["C"],HSC:`SPACE ONLY`,VendorItemID:`ANS-01-10019`,REF:`nan`},
+  {name:`WISCONSIN (Sz. 3)`,location:`C-6`,bins:["C-6"],carts:["C"],HSC:`SPACE ONLY`,VendorItemID:`ANS-01-10020`,REF:`nan`},
+  {name:`Y-TUBING (BELMONT)`,location:`H-9`,bins:["H-9"],carts:["H"],HSC:`78240`,VendorItemID:`903-00004P`,REF:`nan`}
+];
+    const BY_CART = {
+  'G': [
+    {name:`ADAPTER FOR O2 TUBING`,location:`G-6`,bins:["G-6"],carts:["G"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+    {name:`AMBU BAG MASK (ADULT)`,location:`G-8`,bins:["G-8"],carts:["G"],HSC:`1112`,VendorItemID:`H015372`,REF:``},
+    {name:`AMBU BAG MASK (PAEDS)`,location:`G-8`,bins:["G-8"],carts:["G"],HSC:`38556`,VendorItemID:`M161055104`,REF:``},
+    {name:`BP CUFF (PHILIPS) (Sz. 1)`,location:`G-2`,bins:["G-2"],carts:["G"],HSC:`73216`,VendorItemID:`M1866B`,REF:``},
+    {name:`BP CUFF (PHILIPS) (Sz. 2)`,location:`G-2`,bins:["G-2"],carts:["G"],HSC:`73212`,VendorItemID:`M1868SJT`,REF:``},
+    {name:`BP CUFF (PHILIPS) (Sz. 3)`,location:`G-2`,bins:["G-2"],carts:["G"],HSC:`73213`,VendorItemID:`M1870S`,REF:``},
+    {name:`BP CUFF (PHILIPS) (Sz. 4)`,location:`G-2`,bins:["G-2"],carts:["G"],HSC:`73214`,VendorItemID:`M1872S`,REF:``},
+    {name:`BP CUFF (PHILIPS) (Sz. 5)`,location:`G-2`,bins:["G-2"],carts:["G"],HSC:`73215`,VendorItemID:`M1873SJT`,REF:``},
+    {name:`BP CUFF (RESUSABLE) (ADULT) (LARGE)`,location:`G-2`,bins:["G-2"],carts:["G"],HSC:`74507`,VendorItemID:`989803147891`,REF:``},
+    {name:`BP CUFF (RESUSABLE) (ADULT) (REGULAR)`,location:`G-2`,bins:["G-2"],carts:["G"],HSC:`74506`,VendorItemID:`989803147871`,REF:``},
+    {name:`BP CUFF (RESUSABLE) (ADULT) (SMALL)`,location:`G-2`,bins:["G-2"],carts:["G"],HSC:`74505`,VendorItemID:`989803147861`,REF:``},
+    {name:`BP CUFF (RESUSABLE) (INFANT)`,location:`G-2`,bins:["G-2"],carts:["G"],HSC:`74503`,VendorItemID:`989803147841`,REF:``},
+    {name:`BP CUFF (RESUSABLE) (PAEDS)`,location:`G-2`,bins:["G-2"],carts:["G"],HSC:`74504`,VendorItemID:`989803147851`,REF:``},
+    {name:`DIAGNOSTIC RECORDING (DEFIB) PAPER`,location:`G-6`,bins:["G-6"],carts:["G"],HSC:`70931`,VendorItemID:`800000087701JT`,REF:``},
+    {name:`ECG EXTENSION`,location:`G-1`,bins:["G-1"],carts:["G"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+    {name:`EEG CABLES`,location:`G-1`,bins:["G-1"],carts:["G"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+    {name:`EEG LEADS (REUSABLE)`,location:`G-1`,bins:["G-1"],carts:["G"],HSC:`78258`,VendorItemID:`989803105641`,REF:``},
+    {name:`EEG STICKERS (NEO/ PAEDS)`,location:`G-1`,bins:["G-1"],carts:["G"],HSC:`12585`,VendorItemID:`13951C`,REF:``},
+    {name:`EEG TRUNK CABLES`,location:`G-1`,bins:["G-1"],carts:["G"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+    {name:`INLINE CO2 SAMPLING (INFANT)`,location:`G-6`,bins:["G-6"],carts:["G"],HSC:`57522`,VendorItemID:`MVIIHH`,REF:``},
+    {name:`INLINE CO2 SAMPLING (PAEDS/ADULT)`,location:`G-6`,bins:["G-6"],carts:["G"],HSC:`55049`,VendorItemID:`MVAIH100U`,REF:``},
+    {name:`METERED DOSE INHALER ADAPTER`,location:`G-5`,bins:["G-5"],carts:["G"],HSC:`43970`,VendorItemID:`RTC 15-D`,REF:``},
+    {name:`MIE (NON-REBREATHER CIRCUIT) (1000 ml)`,location:`G-8`,bins:["G-8"],carts:["G"],HSC:`64694`,VendorItemID:`OL-609806-40`,REF:``},
+    {name:`MIE (NON-REBREATHER CIRCUIT) (500 ml)`,location:`G-8`,bins:["G-8"],carts:["G"],HSC:`64695`,VendorItemID:`OL-609806-39`,REF:``},
+    {name:`NASAL CANNULA w/ETCO2 (ADULT)`,location:`G-5`,bins:["G-5"],carts:["G"],HSC:`72300`,VendorItemID:`4706F-7-0-25`,REF:``},
+    {name:`NASAL CANNULA w/ETCO2 (INFANT)`,location:`G-5`,bins:["G-5"],carts:["G"],HSC:`48305`,VendorItemID:`4701F-7-0-25`,REF:``},
+    {name:`NASAL CANNULA w/ETCO2 (PAEDS)`,location:`G-5`,bins:["G-5"],carts:["G"],HSC:`57692`,VendorItemID:`S104702F25`,REF:``},
+    {name:`NEBULIZER (GREEN)`,location:`G-6`,bins:["G-6"],carts:["G"],HSC:`31225`,VendorItemID:`1730JT`,REF:``},
+    {name:`O2 TUBING (STANDARD) (7 Ft)`,location:`G-6`,bins:["G-6"],carts:["G"],HSC:`1243`,VendorItemID:`1115`,REF:``},
+    {name:`SIMPLE MASK (ADULT)`,location:`G-7`,bins:["G-7"],carts:["G"],HSC:`6821`,VendorItemID:`P001201`,REF:``},
+    {name:`SIMPLE MASK (PAEDS)`,location:`G-7`,bins:["G-7"],carts:["G"],HSC:`6820`,VendorItemID:`1042`,REF:``},
+    {name:`SKIN PREP GEL FOR EEG`,location:`G-1`,bins:["G-1"],carts:["G"],HSC:`53482`,VendorItemID:`122-736100`,REF:``},
+    {name:`SKIN TEMP PROBE (REUSABLE)`,location:`G-1`,bins:["G-1"],carts:["G"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:`nan`},
+    {name:`STRAIGHT CONNECTOR (4.5-6 mm)`,location:`G-6`,bins:["G-6"],carts:["G"],HSC:`61640`,VendorItemID:`717670`,REF:``},
+    {name:`STRAIGHT/ TUBING CONNECTOR`,location:`G-4`,bins:["G-4"],carts:["G"],HSC:`616`,VendorItemID:`P354A`,REF:``},
+    {name:`SUCTION LINER (1000 ml)`,location:`G-3`,bins:["G-3"],carts:["G"],HSC:`64468`,VendorItemID:`S2157157`,REF:``},
+    {name:`SUCTION TUBING w/TIP (120")`,location:`G-4`,bins:["G-4"],carts:["G"],HSC:`4175`,VendorItemID:`70-7620`,REF:`nan`},
+    {name:`TEPMERATURE PROBE (GENERAL PURPOSE) (DEROYAL)`,location:`G-3`,bins:["G-3"],carts:["G"],HSC:`79244`,VendorItemID:`D-81-02S409`,REF:``}
+  ],
+  'I': [
+    {name:`ALCOHOL WIPE (LARGE)`,location:`I-1`,bins:["I-1"],carts:["I"],HSC:`63026`,VendorItemID:`LP104-01`,REF:``},
+    {name:`AMPOULE CRACKER (SMALL) (1-4 ml)`,location:`I-1`,bins:["I-1"],carts:["I"],HSC:`43605`,VendorItemID:`60605-04`,REF:``},
+    {name:`ARTERIAL BLOOD GAS KIT`,location:`I-1`,bins:["I-1"],carts:["I"],HSC:`73250`,VendorItemID:`WES3101JT`,REF:``},
+    {name:`ARTERIAL CATH SET (22 G x 5 cm)`,location:`I-8`,bins:["I-8"],carts:["I"],HSC:`39603`,VendorItemID:`SAC-00522-PBX`,REF:``},
+    {name:`ARTERIAL CATH SET (22 G x 8 cm)`,location:`I-8`,bins:["I-8"],carts:["I"],HSC:`39602`,VendorItemID:`SAC-00822-PBX`,REF:``},
+    {name:`BANDAID (LATEX FREE) (RECTANGLE) (3.8 cm x 5 cm)`,location:`I-5`,bins:["I-5"],carts:["I"],HSC:`55513`,VendorItemID:`BSN7645612`,REF:``},
+    {name:`BLUNT NEEDLE (18 G x 1.5")`,location:`I-6`,bins:["I-6"],carts:["I"],HSC:`60852`,VendorItemID:`BD305180`,REF:``},
+    {name:`BLUNT NEEDLE w/FILTER (18 G x 1.5")`,location:`I-7`,bins:["I-7"],carts:["I"],HSC:`60814`,VendorItemID:`BD305211`,REF:``},
+    {name:`BLUNT PLASTIC CANNULA`,location:`I-7`,bins:["I-7"],carts:["I"],HSC:`4172`,VendorItemID:`BD303345`,REF:``},
+    {name:`BUTTERFLY NEEDLE (BD) (BLUE) (25 G x 0.75")`,location:`I-1`,bins:["I-1"],carts:["I"],HSC:`63334`,VendorItemID:`BD367363`,REF:``},
+    {name:`CHLORHEXIDINE SWABSTICK (SMALL)`,location:`I-1`,bins:["I-1"],carts:["I"],HSC:`60825`,VendorItemID:`3M10203`,REF:``},
+    {name:`DEFIB PADS (GEL PAD)`,location:`I-7`,bins:["I-7"],carts:["I"],HSC:`976`,VendorItemID:`3M2345N`,REF:``},
+    {name:`DILATOR (3 Fr x 10 cm)`,location:`I-8`,bins:["I-8"],carts:["I"],HSC:`10273`,VendorItemID:`G02577`,REF:``},
+    {name:`DILATOR (COONS) (6 Fr)`,location:`I-8`,bins:["I-8"],carts:["I"],HSC:`42229`,VendorItemID:`G04221`,REF:``},
+    {name:`EZ-IO DRILL SET`,location:`I-7`,bins:["I-7"],carts:["I"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+    {name:`EZ-IO NEEDLE SET (>3 Kg) (15 G x 25 mm)`,location:`I-7`,bins:["I-7"],carts:["I"],HSC:`54882`,VendorItemID:`9001-VC-005`,REF:``},
+    {name:`EZ-IO NEEDLE SET (>40 Kg) (15 G x 45 mm)`,location:`I-7`,bins:["I-7"],carts:["I"],HSC:`65409`,VendorItemID:`9079-VC-005`,REF:``},
+    {name:`EZ-IO NEEDLE SET (3-39 Kg) (15 G x 15 mm)`,location:`I-7`,bins:["I-7"],carts:["I"],HSC:`48185`,VendorItemID:`9018-VC-005`,REF:``},
+    {name:`GAUZE (NON-STERILE) (LARGE) (4" x 4")`,location:`I-6`,bins:["I-6"],carts:["I"],HSC:`60804`,VendorItemID:`DUP94144`,REF:``},
+    {name:`GUIDEWIRE (FIXED CORE) (0.015" x 20 cm)`,location:`I-8`,bins:["I-8"],carts:["I"],HSC:`16088`,VendorItemID:`G02230`,REF:``},
+    {name:`GUIDEWIRE (FIXED CORE) (0.018" x 50 cm)`,location:`I-8`,bins:["I-8"],carts:["I"],HSC:`4197`,VendorItemID:`G29182`,REF:``},
+    {name:`GUIDEWIRE (VASCULAR SPRING) (0.018" x 5-3/8")`,location:`I-8`,bins:["I-8"],carts:["I"],HSC:`31088`,VendorItemID:`RW-04018`,REF:``},
+    {name:`IV CATH ANGIO (BLUE) (22 G x 1") (SHORT)`,location:`I-5`,bins:["I-5"],carts:["I"],HSC:`72486`,VendorItemID:`BD381123`,REF:``},
+    {name:`IV CATH ANGIO (GREEN) (18 G x 1.16") (NON-SAFETY) (SHORT)`,location:`I-5`,bins:["I-5"],carts:["I"],HSC:`54319`,VendorItemID:`BD381144`,REF:``},
+    {name:`IV CATH ANGIO (PINK) (20 G x 1.16") (NON-SAFETY) (SHORT)`,location:`I-5`,bins:["I-5"],carts:["I"],HSC:`64492`,VendorItemID:`BD381134`,REF:``},
+    {name:`IV CATH ANGIO (PINK) (20 G x 1.88") (NON-SAFETY) (LONG)`,location:`I-4`,bins:["I-4"],carts:["I"],HSC:`50270`,VendorItemID:`BD381137`,REF:``},
+    {name:`IV CATH ANGIO (YELLOW) (24 G x 0.75") (NON-SAFETY) (SHORT)`,location:`I-5`,bins:["I-5"],carts:["I"],HSC:`50267`,VendorItemID:`BD381112`,REF:``},
+    {name:`IV CATH INTROCAN (BLUE) (22 G x 1") (SAFETY) (SHORT)`,location:`I-4`,bins:["I-4"],carts:["I"],HSC:`50250`,VendorItemID:`BB4252519-02`,REF:``},
+    {name:`IV CATH INTROCAN (BLUE) (22 G x 1.75") (SAFETY) (LONG)`,location:`I-3`,bins:["I-3"],carts:["I"],HSC:`65536`,VendorItemID:`BB4252520-02`,REF:``},
+    {name:`IV CATH INTROCAN (GREEN) (18 G x 1.25") (SAFETY) (SHORT)`,location:`I-4`,bins:["I-4"],carts:["I"],HSC:`50254`,VendorItemID:`BB4252560-02`,REF:``},
+    {name:`IV CATH INTROCAN (GREEN) (18 G x 1.75") (SAFETY) (LONG)`,location:`I-3`,bins:["I-3"],carts:["I"],HSC:`50256`,VendorItemID:`BB4252551-02`,REF:``},
+    {name:`IV CATH INTROCAN (GREY) (16 G x 1.25") (SAFETY) (SHORT)`,location:`I-4`,bins:["I-4"],carts:["I"],HSC:`50258`,VendorItemID:`BB4252586-02`,REF:``},
+    {name:`IV CATH INTROCAN (GREY) (16 G x 2") (SAFETY) (LONG)`,location:`I-3`,bins:["I-3"],carts:["I"],HSC:`50257`,VendorItemID:`BB4252578-02`,REF:``},
+    {name:`IV CATH INTROCAN (ORANGE) (14 G x 1.25") (SAFETY) (SHORT)`,location:`I-4`,bins:["I-4"],carts:["I"],HSC:`50260`,VendorItemID:`BB4251890-02`,REF:``},
+    {name:`IV CATH INTROCAN (ORANGE) (14 G x 2") (SAFETY) (LONG)`,location:`I-3`,bins:["I-3"],carts:["I"],HSC:`50259`,VendorItemID:`BB4252594-02`,REF:``},
+    {name:`IV CATH INTROCAN (PINK) (20 G x 1.25") (SAFETY) (SHORT)`,location:`I-4`,bins:["I-4"],carts:["I"],HSC:`50252`,VendorItemID:`BB4252535-02`,REF:``},
+    {name:`IV CATH INTROCAN (PINK) (20 G x 1.75") (SAFETY) (LONG)`,location:`I-3`,bins:["I-3"],carts:["I"],HSC:`50253`,VendorItemID:`BB4252527-02`,REF:``},
+    {name:`IV CATH INTROCAN (YELLOW) (24 G x 0.55") (SAFETY) (SHORT)`,location:`I-3`,bins:["I-3"],carts:["I"],HSC:`50249`,VendorItemID:`BB4252511-02`,REF:``},
+    {name:`IV CATH INTROCAN (YELLOW) (24 G x 0.75") (SAFETY)`,location:`I-4`,bins:["I-4"],carts:["I"],HSC:`50248`,VendorItemID:`BB4252500-02`,REF:``},
+    {name:`MASTISOL STICK (2/3 ml)`,location:`I-5`,bins:["I-5"],carts:["I"],HSC:`10348`,VendorItemID:`RGR3006-48`,REF:``},
+    {name:`N.S. FLUSH (10 ml)`,location:`I-9`,bins:["I-9"],carts:["I"],HSC:`38983`,VendorItemID:`BD306547`,REF:``},
+    {name:`NEEDLE (HYPODERMIC) (23 G x 1")`,location:`I-3`,bins:["I-3"],carts:["I"],HSC:`2417`,VendorItemID:`BD305902`,REF:``},
+    {name:`NEEDLE (HYPODERMIC) (25 G x 5/8")`,location:`I-3`,bins:["I-3"],carts:["I"],HSC:`2176`,VendorItemID:`BD305901`,REF:``},
+    {name:`NEEDLE (HYPODERMIC) (27 G x 5/8")`,location:`I-3`,bins:["I-3"],carts:["I"],HSC:`2177`,VendorItemID:`BD305921`,REF:``},
+    {name:`SYRINGE (HEPARINIZED) (3 ml)`,location:`I-1`,bins:["I-1"],carts:["I"],HSC:`79136`,VendorItemID:`4042-2`,REF:`nan`},
+    {name:`TAPE (BROWN)`,location:`I-2`,bins:["I-2"],carts:["I"],HSC:`4153`,VendorItemID:`BSN7206902`,REF:`nan`},
+    {name:`TAPE (CLEAR) (1")`,location:`I-2`,bins:["I-2"],carts:["I"],HSC:`62229`,VendorItemID:`3M1527-1`,REF:`nan`},
+    {name:`TAPE (CLOTH) (1")`,location:`I-2`,bins:["I-2"],carts:["I"],HSC:`32724`,VendorItemID:`3M2861`,REF:`nan`},
+    {name:`TAPE (HOCKEY)`,location:`I-2`,bins:["I-2"],carts:["I"],HSC:`60861`,VendorItemID:`3M1538-1`,REF:`nan`},
+    {name:`TAPE (LEUKOTAPE) (3.8 cm x 13.7 m)`,location:`I-2`,bins:["I-2"],carts:["I"],HSC:`50057`,VendorItemID:`BSN7616800`,REF:`nan`},
+    {name:`TAPE (PAPER) (2")`,location:`I-2`,bins:["I-2"],carts:["I"],HSC:`858`,VendorItemID:`3M1530-2`,REF:`nan`},
+    {name:`TAPE (PINK) (WATERPROOF) (1")`,location:`I-2`,bins:["I-2"],carts:["I"],HSC:`60870`,VendorItemID:`BSN7235906`,REF:`nan`},
+    {name:`TAPE (STRAPPING) (4cm x 10 m)`,location:`I-2`,bins:["I-2"],carts:["I"],HSC:`60862`,VendorItemID:`BSN7149000`,REF:`nan`},
+    {name:`TAPE (SURGICAL) (1")`,location:`I-2`,bins:["I-2"],carts:["I"],HSC:`857`,VendorItemID:`3M1525-1`,REF:`nan`},
+    {name:`TEGADERM (ADVANCED) (SMALL) (2" x 2.25")`,location:`I-5`,bins:["I-5"],carts:["I"],HSC:`62969`,VendorItemID:`3M1682`,REF:`nan`},
+    {name:`TEGADERM (ADVANCED) (X-SMALL) (1.5" x 1.75")`,location:`I-5`,bins:["I-5"],carts:["I"],HSC:`62968`,VendorItemID:`3M1680`,REF:`nan`},
+    {name:`TEGADERM (LARGE) (4" x 4.75")`,location:`I-5`,bins:["I-5"],carts:["I"],HSC:`62221`,VendorItemID:`3M1626W`,REF:`nan`},
+    {name:`TEGADERM (SMALL) (2-3/8" x 2.75")`,location:`I-5`,bins:["I-5"],carts:["I"],HSC:`62220`,VendorItemID:`3M1624W`,REF:`nan`}
+  ],
+  'A': [
+    {name:`ANESTHESIA CIRCUIT (EXTENSION)`,location:`A-9`,bins:["A-9"],carts:["A"],HSC:`50055`,VendorItemID:`V245108EX`,REF:``},
+    {name:`ANESTHESIA CIRCUIT (NEONATAL)`,location:`A-6`,bins:["A-6"],carts:["A"],HSC:`69967`,VendorItemID:`MP00333`,REF:``},
+    {name:`ANESTHESIA CIRCUIT (PEDIATRIC)`,location:`A8+A7`,bins:["A8", "A7"],carts:["A"],HSC:`36077`,VendorItemID:`C37101678D-NL`,REF:``},
+    {name:`BREATHING BAG (2 L)`,location:`A-6`,bins:["A-6"],carts:["A"],HSC:`55156`,VendorItemID:`670002JT`,REF:``},
+    {name:`CO2 ABSORBER`,location:`A-2`,bins:["A-2"],carts:["A"],HSC:`74526`,VendorItemID:`MX00004`,REF:``},
+    {name:`CO2 SAMPLING LINE`,location:`A-3`,bins:["A-3"],carts:["A"],HSC:`72293`,VendorItemID:`12-1040`,REF:``},
+    {name:`ELBOW CONNECTOR w/GAS PORT`,location:`A-5`,bins:["A-5"],carts:["A"],HSC:`36076`,VendorItemID:`225-3523-804`,REF:``},
+    {name:`GAS MACHINE BREATHING ASSEMBLY`,location:`A-1`,bins:["A-1"],carts:["A"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+    {name:`HMEF FILTER (<10 KG)`,location:`A-3`,bins:["A-3"],carts:["A"],HSC:`70947`,VendorItemID:`1441000`,REF:``},
+    {name:`HMEF FILTER (>10 KG)`,location:`A-4`,bins:["A-4"],carts:["A"],HSC:`70946`,VendorItemID:`1831000`,REF:``},
+    {name:`HMEF MECHANICAL FILTER (EXPIRATORY LIMB)`,location:`A-5`,bins:["A-5"],carts:["A"],HSC:`62344`,VendorItemID:`351-5979`,REF:``},
+    {name:`ISO FILLING ADAPTER`,location:`A-2`,bins:["A-2"],carts:["A"],HSC:`61071`,VendorItemID:`M36110`,REF:``},
+    {name:`MH VAPOR FILTER`,location:`A-3`,bins:["A-3"],carts:["A"],HSC:`56802`,VendorItemID:`VC101`,REF:``},
+    {name:`SENSOR SPIRILOG FLOW`,location:`A-1`,bins:["A-1"],carts:["A"],HSC:`61070`,VendorItemID:`8403735`,REF:``},
+    {name:`STRAIGHT GAS SAMPLING CONNECTOR`,location:`A-2`,bins:["A-2"],carts:["A"],HSC:`36262`,VendorItemID:`S225-3524804JT`,REF:``},
+    {name:`WATERLOCK 2`,location:`A-1`,bins:["A-1"],carts:["A"],HSC:`72303`,VendorItemID:`6872020`,REF:`nan`}
+  ],
+  'D': [
+    {name:`ARNDT ENDOBRONCHIAL BLOCKER SET (5 Fr x 50 cm)`,location:`D-7`,bins:["D-7"],carts:["D"],HSC:`36275`,VendorItemID:`G44109`,REF:``},
+    {name:`ARNDT ENDOBRONCHIAL BLOCKER SET (7 Fr x 65 cm)`,location:`D-7`,bins:["D-7"],carts:["D"],HSC:`39605`,VendorItemID:`G26907`,REF:``},
+    {name:`BIOPSY VALVE`,location:`D-8`,bins:["D-8"],carts:["D"],HSC:`28330`,VendorItemID:`MAJ-210JIT`,REF:``},
+    {name:`BRONCH ADAPTER`,location:`D-5`,bins:["D-5"],carts:["D"],HSC:`43907`,VendorItemID:`1898000`,REF:``},
+    {name:`BRONCHOSCOPE AIRWAY (Sz. 0, 36 mm)`,location:`D-4`,bins:["D-4"],carts:["D"],HSC:`69298`,VendorItemID:`30-40-400-1`,REF:``},
+    {name:`BRONCHOSCOPE AIRWAY (Sz. 2, 65 mm)`,location:`D-4`,bins:["D-4"],carts:["D"],HSC:`69299`,VendorItemID:`30-40-420-1`,REF:``},
+    {name:`BRONCHOSCOPE AIRWAY (Sz. 4, 85 mm)`,location:`D-4`,bins:["D-4"],carts:["D"],HSC:`69300`,VendorItemID:`30-40-440-1`,REF:``},
+    {name:`CATHETER (EXCHANGE AIRWAY) (11 Fr x 83 cm)`,location:`D6-B-2`,bins:["D6-B-2"],carts:["D"],HSC:`44131`,VendorItemID:`G06732`,REF:``},
+    {name:`CATHETER (EXCHANGE AIRWAY) (8 Fr x 45 cm)`,location:`D6-B-1`,bins:["D6-B-1"],carts:["D"],HSC:`43687`,VendorItemID:`G07833`,REF:``},
+    {name:`CATHETER (FOGARTY OCCLUSION) (3 Fr x 80 cm)`,location:`D-6`,bins:["D-6"],carts:["D"],HSC:`581`,VendorItemID:`120803F`,REF:``},
+    {name:`DOUBLE LUMEN ETT (LEFT) (Sz. 26)`,location:`D-3`,bins:["D-3"],carts:["D"],HSC:`27738`,VendorItemID:`116100260`,REF:``},
+    {name:`DOUBLE LUMEN ETT (LEFT) (Sz. 28)`,location:`D-3`,bins:["D-3"],carts:["D"],HSC:`27532`,VendorItemID:`116100280`,REF:``},
+    {name:`DOUBLE LUMEN ETT (LEFT) (Sz. 32)`,location:`D-3`,bins:["D-3"],carts:["D"],HSC:`43957`,VendorItemID:`125032`,REF:``},
+    {name:`DOUBLE LUMEN ETT (LEFT) (Sz. 35)`,location:`D-3`,bins:["D-3"],carts:["D"],HSC:`27533`,VendorItemID:`116100350`,REF:``},
+    {name:`DOUBLE LUMEN ETT (LEFT) (Sz. 37)`,location:`D-2`,bins:["D-2"],carts:["D"],HSC:`27534`,VendorItemID:`116100370`,REF:``},
+    {name:`DOUBLE LUMEN ETT (LEFT) (Sz. 39)`,location:`D-2`,bins:["D-2"],carts:["D"],HSC:`43961`,VendorItemID:`116100390`,REF:``},
+    {name:`DOUBLE LUMEN ETT (LEFT) (Sz. 41)`,location:`D-2`,bins:["D-2"],carts:["D"],HSC:`43962`,VendorItemID:`116100410`,REF:``},
+    {name:`DOUBLE LUMEN ETT (RIGHT) (Sz. 26)`,location:`D-2`,bins:["D-2"],carts:["D"],HSC:`27739`,VendorItemID:`116200260`,REF:``},
+    {name:`DOUBLE LUMEN ETT (RIGHT) (Sz. 32)`,location:`D-1`,bins:["D-1"],carts:["D"],HSC:`49637`,VendorItemID:`197-32R`,REF:``},
+    {name:`DOUBLE LUMEN ETT (RIGHT) (Sz. 35)`,location:`D-1`,bins:["D-1"],carts:["D"],HSC:`27535`,VendorItemID:`116200350`,REF:``},
+    {name:`DOUBLE LUMEN ETT (RIGHT) (Sz. 37)`,location:`D-1`,bins:["D-1"],carts:["D"],HSC:`29438`,VendorItemID:`116200370`,REF:``},
+    {name:`DOUBLE LUMEN ETT (RIGHT) (Sz. 39)`,location:`D-1`,bins:["D-1"],carts:["D"],HSC:`43985`,VendorItemID:`116200390`,REF:``},
+    {name:`DOUBLE LUMEN ETT (RIGHT) (Sz. 41)`,location:`D-1`,bins:["D-1"],carts:["D"],HSC:`43986`,VendorItemID:`116200410`,REF:``},
+    {name:`EFONA TRAY`,location:`D-7`,bins:["D-7"],carts:["D"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+    {name:`ENDOSCOPY MASK (Sz. 1)`,location:`D-8`,bins:["D-8"],carts:["D"],HSC:`44026`,VendorItemID:`VBM30-40-111`,REF:``},
+    {name:`ENDOSCOPY MASK (Sz. 3)`,location:`D-8`,bins:["D-8"],carts:["D"],HSC:`44027`,VendorItemID:`VBM30-40-333`,REF:``},
+    {name:`ENDOSCOPY MASK (Sz. 5)`,location:`D-8`,bins:["D-8"],carts:["D"],HSC:`44028`,VendorItemID:`VBM30-40-555`,REF:``},
+    {name:`FLEXIBLE CONNECTOR`,location:`D-5`,bins:["D-5"],carts:["D"],HSC:`50056`,VendorItemID:`I2835040000`,REF:``},
+    {name:`INTUBATING INTRODUCER (FROVA) (14 Fr)`,location:`D6-A-1`,bins:["D6-A-1"],carts:["D"],HSC:`43688`,VendorItemID:`G23646`,REF:``},
+    {name:`LARYNGO-TRACHAEL ATOMIZER`,location:`D-6`,bins:["D-6"],carts:["D"],HSC:`50275`,VendorItemID:`700LTAD-L7`,REF:``},
+    {name:`LENS CLEANSER (ANTI-FOG)`,location:`D-4`,bins:["D-4"],carts:["D"],HSC:`6612`,VendorItemID:`C56-121`,REF:``},
+    {name:`LUBRICANT (180 ml)`,location:`D-8`,bins:["D-8"],carts:["D"],HSC:`79308`,VendorItemID:`252090`,REF:``},
+    {name:`LUBRICANT JELLY`,location:`D-8`,bins:["D-8"],carts:["D"],HSC:`60845`,VendorItemID:`SM1322N`,REF:``},
+    {name:`MAD (ATOMIZER) (NASAL)`,location:`D-6`,bins:["D-6"],carts:["D"],HSC:`54912`,VendorItemID:`300LTAD-N3`,REF:``},
+    {name:`PILOT BALLON REPAIR KIT`,location:`D-4`,bins:["D-4"],carts:["D"],HSC:`64489`,VendorItemID:`BE 409`,REF:``},
+    {name:`SCALPEL (Sz. 15)`,location:`D-7`,bins:["D-7"],carts:["D"],HSC:`1017`,VendorItemID:`AS371615`,REF:``},
+    {name:`SUCTION CATHETER (10 Fr)`,location:`D-9`,bins:["D-9"],carts:["D"],HSC:`731`,VendorItemID:`401021`,REF:``},
+    {name:`SUCTION CATHETER (12 Fr)`,location:`D-9`,bins:["D-9"],carts:["D"],HSC:`732`,VendorItemID:`401221`,REF:``},
+    {name:`SUCTION CATHETER (14 Fr)`,location:`D-9`,bins:["D-9"],carts:["D"],HSC:`733`,VendorItemID:`401421`,REF:``},
+    {name:`SUCTION CATHETER (6 Fr)`,location:`D-9`,bins:["D-9"],carts:["D"],HSC:`729`,VendorItemID:`50-1006JT`,REF:``},
+    {name:`SUCTION CATHETER (8 Fr)`,location:`D-9`,bins:["D-9"],carts:["D"],HSC:`730`,VendorItemID:`400821`,REF:``},
+    {name:`SUCTION VALVE`,location:`D-8`,bins:["D-8"],carts:["D"],HSC:`28331`,VendorItemID:`MAJ-209JIT`,REF:`nan`}
+  ],
+  'H': [
+    {name:`ARTLINE TRANSDUCER HOLDER`,location:`H-1`,bins:["H-1"],carts:["H"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+    {name:`BLOOD FILTER`,location:`H-6`,bins:["H-6"],carts:["H"],HSC:`3957`,VendorItemID:`4C7750`,REF:``},
+    {name:`BLOOD FILTER`,location:`H-6`,bins:["H-6"],carts:["H"],HSC:`75710`,VendorItemID:`179-B30150`,REF:``},
+    {name:`CATHETER MAHURKAR (10 Fr x 12 cm)`,location:`H-7`,bins:["H-7"],carts:["H"],HSC:`36249`,VendorItemID:`8817143005`,REF:``},
+    {name:`CATHETER MAHURKAR (11.5 Fr x 19.5 cm)`,location:`H-7`,bins:["H-7"],carts:["H"],HSC:`43814`,VendorItemID:`8813793009`,REF:``},
+    {name:`COLD SPRAY`,location:`H-3`,bins:["H-3"],carts:["H"],HSC:`55639`,VendorItemID:`0386-0008-03`,REF:``},
+    {name:`CVL (DOUBLE LUMEN) (4 Fr x 5 cm)`,location:`H-8`,bins:["H-8"],carts:["H"],HSC:`594`,VendorItemID:`G04133`,REF:``},
+    {name:`CVL (DOUBLE LUMEN) (5 Fr x 5 cm)`,location:`H-8`,bins:["H-8"],carts:["H"],HSC:`595`,VendorItemID:`G04022`,REF:``},
+    {name:`CVL (DOUBLE LUMEN) (5 Fr x 8 cm)`,location:`H-8`,bins:["H-8"],carts:["H"],HSC:`596`,VendorItemID:`G03997`,REF:``},
+    {name:`CVL (TRIPLE LUMEN) (5 Fr x 5 cm)`,location:`H-8`,bins:["H-8"],carts:["H"],HSC:`599`,VendorItemID:`G04134`,REF:``},
+    {name:`CVL (TRIPLE LUMEN) (5 Fr x 8 cm)`,location:`H-8`,bins:["H-8"],carts:["H"],HSC:`600`,VendorItemID:`G04135`,REF:``},
+    {name:`CVL (TRIPLE LUMEN) (7 Fr x 15 cm)`,location:`H-8`,bins:["H-8"],carts:["H"],HSC:`598`,VendorItemID:`G02937`,REF:``},
+    {name:`CVL SUPPORT KIT`,location:`H-7`,bins:["H-7"],carts:["H"],HSC:`62930`,VendorItemID:`DYNJ52283C`,REF:``},
+    {name:`ECG CABLES (NEONATAL)`,location:`H-1`,bins:["H-1"],carts:["H"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+    {name:`ECG CABLES (PAEDS)`,location:`H-1`,bins:["H-1"],carts:["H"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+    {name:`EXT SET (TRANLUCENT) (6")`,location:`H-4`,bins:["H-4"],carts:["H"],HSC:`62900`,VendorItemID:`I88424080411`,REF:``},
+    {name:`FEMALE CONNECTOR (DOUBLE)`,location:`H-6`,bins:["H-6"],carts:["H"],HSC:`1884`,VendorItemID:`040183000A`,REF:``},
+    {name:`INVASIVE BP CABLE`,location:`H-1`,bins:["H-1"],carts:["H"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+    {name:`INVASIVE BP SPLITTER`,location:`H-1`,bins:["H-1"],carts:["H"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+    {name:`MALE CONNECTOR (DOUBLE)`,location:`H-6`,bins:["H-6"],carts:["H"],HSC:`1699`,VendorItemID:`MX493JT`,REF:``},
+    {name:`MATTRESS WARMER (INFANT)`,location:`H-2`,bins:["H-2"],carts:["H"],HSC:`69946`,VendorItemID:`MDS1017`,REF:``},
+    {name:`MDRD KIDNEY BASIN`,location:`H-1`,bins:["H-1"],carts:["H"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+    {name:`MICRON FILTER (0.2 MICRON)(PEADS)`,location:`H-3`,bins:["H-3"],carts:["H"],HSC:`60243`,VendorItemID:`ICB6008`,REF:``},
+    {name:`MICRON FILTER (1.2)`,location:`H-3`,bins:["H-3"],carts:["H"],HSC:`62951`,VendorItemID:`AL10012866`,REF:``},
+    {name:`NEEDLELESS ACCESS DEVICE (IV BAG SPIKE)`,location:`H-6`,bins:["H-6"],carts:["H"],HSC:`35737`,VendorItemID:`ICCS-10`,REF:``},
+    {name:`NORMAL SALINE (10 ml VIAL)`,location:`H-3`,bins:["H-3"],carts:["H"],HSC:`79016`,VendorItemID:`L0010001`,REF:``},
+    {name:`PATIENT SAFETY STRAPS (4")`,location:`H-2`,bins:["H-2"],carts:["H"],HSC:`32789`,VendorItemID:`470-110-0027`,REF:``},
+    {name:`PLASMA-LYTE (1000 ml)`,location:`H-3`,bins:["H-3"],carts:["H"],HSC:`47079`,VendorItemID:`JB2544JIT`,REF:``},
+    {name:`PRESSURE INFUSION BAG (500 ml)`,location:`H-5`,bins:["H-5"],carts:["H"],HSC:`60734`,VendorItemID:`V24IN800012`,REF:``},
+    {name:`PRESSURE MONITORING DOUBLE TRANSDUCER`,location:`H-4`,bins:["H-4"],carts:["H"],HSC:`72754`,VendorItemID:`T001709A`,REF:``},
+    {name:`PRESSURE MONITORING SINGLE TRANSDUCER`,location:`H-5`,bins:["H-5"],carts:["H"],HSC:`72749`,VendorItemID:`PXMK2041`,REF:``},
+    {name:`PRESSURE MONITORING TUBING`,location:`H-5`,bins:["H-5"],carts:["H"],HSC:`1245`,VendorItemID:`040106001A`,REF:``},
+    {name:`RAPID INFUSOR TUBING`,location:`H-9`,bins:["H-9"],carts:["H"],HSC:`69919`,VendorItemID:`903-00006P`,REF:``},
+    {name:`STERILE WATER (10 ml VIAL)`,location:`H-2`,bins:["H-2"],carts:["H"],HSC:`79015`,VendorItemID:`L0010005`,REF:``},
+    {name:`TOURNIQUET IV`,location:`H-3`,bins:["H-3"],carts:["H"],HSC:`27081`,VendorItemID:`CH-6064`,REF:`nan`},
+    {name:`US PROBE COVER (18 cm x 120 cm)`,location:`H-7`,bins:["H-7"],carts:["H"],HSC:`50159`,VendorItemID:`32812`,REF:`nan`},
+    {name:`VIAL SPIKE (MULTI USE)`,location:`H-2`,bins:["H-2"],carts:["H"],HSC:`52874`,VendorItemID:`179-CH-70`,REF:`nan`},
+    {name:`Y-TUBING (BELMONT)`,location:`H-9`,bins:["H-9"],carts:["H"],HSC:`78240`,VendorItemID:`903-00004P`,REF:`nan`}
+  ],
+  'F': [
+    {name:`BAIR HUGGER (ADULT) (UNDERBODY)`,location:`F-6`,bins:["F-6"],carts:["F"],HSC:`43685`,VendorItemID:`3M54500`,REF:``},
+    {name:`BAIR HUGGER (PAEDS) (LARGE) (UNDERBODY)`,location:`F-7`,bins:["F-7"],carts:["F"],HSC:`43684`,VendorItemID:`3M55000`,REF:``},
+    {name:`BAIR HUGGER (PAEDS) (UNDERBODY)`,location:`E9+F9`,bins:["E9", "F9"],carts:["E", "F"],HSC:`43683`,VendorItemID:`3M55501`,REF:``},
+    {name:`BAIR HUGGER (SMALL) (LOWER BODY)`,location:`F-8`,bins:["F-8"],carts:["F"],HSC:`73491`,VendorItemID:`3M52500`,REF:``},
+    {name:`BATTERY (9 VOLT)`,location:`F-1`,bins:["F-1"],carts:["F"],HSC:`28014`,VendorItemID:`PGPC1604BK`,REF:``},
+    {name:`BATTERY (AA)`,location:`F-1`,bins:["F-1"],carts:["F"],HSC:`62217`,VendorItemID:`PGPC1500BK`,REF:``},
+    {name:`BATTERY (C)`,location:`F-1`,bins:["F-1"],carts:["F"],HSC:`1486`,VendorItemID:`PGPC1400`,REF:``},
+    {name:`COLOR CARTRIDGE`,location:`F-1`,bins:["F-1"],carts:["F"],HSC:`64350`,VendorItemID:`SLS500-LR833`,REF:``},
+    {name:`CO-OXIMETRY PULSE OX SENSOR (>30 Kg) (ADULT)`,location:`F-4`,bins:["F-4"],carts:["F"],HSC:`78285`,VendorItemID:`4026`,REF:``},
+    {name:`CO-OXIMETRY PULSE OX SENSOR (10-15 Kg) (PAEDS)`,location:`F-4`,bins:["F-4"],carts:["F"],HSC:`78286`,VendorItemID:`4027`,REF:``},
+    {name:`CO-OXIMETRY PULSE OX SENSOR (3-30 Kg) (INFANT)`,location:`F-4`,bins:["F-4"],carts:["F"],HSC:`78287`,VendorItemID:`4028`,REF:``},
+    {name:`EEG SENSOR (SEDLINE) (ADULT)`,location:`F-3`,bins:["F-3"],carts:["F"],HSC:`78892`,VendorItemID:`4248`,REF:``},
+    {name:`EEG SENSOR (SEDLINE) (PAEDS)`,location:`F-3`,bins:["F-3"],carts:["F"],HSC:`78891`,VendorItemID:`4329`,REF:``},
+    {name:`LABEL ROLL (SLS 500I)`,location:`F-1`,bins:["F-1"],carts:["F"],HSC:`64349`,VendorItemID:`SLS500-SLX33`,REF:``},
+    {name:`MEDICATION ADDED LABEL`,location:`F-1`,bins:["F-1"],carts:["F"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+    {name:`MEMO PADS`,location:`F-1`,bins:["F-1"],carts:["F"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+    {name:`NERVE STIM`,location:`F-2`,bins:["F-2"],carts:["F"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+    {name:`O2 REPLACEMENT STICKER (INFANT)`,location:`F-4`,bins:["F-4"],carts:["F"],HSC:`72924`,VendorItemID:`4046JIT`,REF:``},
+    {name:`O2 REPLACEMENT STICKER (NEO/ADULT)`,location:`F-4`,bins:["F-4"],carts:["F"],HSC:`72931`,VendorItemID:`4674`,REF:``},
+    {name:`O2 SENSOR (< 3 KG OR > 4 KG) (PURPLE) (NEO/ADULT)`,location:`F-5`,bins:["F-5"],carts:["F"],HSC:`72921`,VendorItemID:`4003JIT`,REF:``},
+    {name:`O2 SENSOR (10-50 KG) (PINK) (PAEDS)`,location:`F-5`,bins:["F-5"],carts:["F"],HSC:`72919`,VendorItemID:`4001JIT`,REF:``},
+    {name:`O2 SENSOR (3-20 KG) (YELLOW) (INFANT)`,location:`F-5`,bins:["F-5"],carts:["F"],HSC:`72920`,VendorItemID:`4002JIT`,REF:``},
+    {name:`O3 SENSOR (MASIMO) (ADULT)`,location:`F-3`,bins:["F-3"],carts:["F"],HSC:`69976`,VendorItemID:`3756`,REF:``},
+    {name:`O3 SENSOR (MASIMO) (PAEDS)`,location:`F-3`,bins:["F-3"],carts:["F"],HSC:`69977`,VendorItemID:`4235`,REF:``},
+    {name:`O3 SENSOR (REGIONAL) (NEONATAL-INFANT)`,location:`F-3`,bins:["F-3"],carts:["F"],HSC:`72965`,VendorItemID:`4384JIT`,REF:``},
+    {name:`PENCIL`,location:`F-1`,bins:["F-1"],carts:["F"],HSC:`SPACE ONLY`,VendorItemID:`X14259`,REF:``},
+    {name:`RED TAG`,location:`F-2`,bins:["F-2"],carts:["F"],HSC:`56927`,VendorItemID:`7901`,REF:``},
+    {name:`ROCHESTER CLAMPS`,location:`F-2`,bins:["F-2"],carts:["F"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+    {name:`SCISSOR`,location:`F-2`,bins:["F-2"],carts:["F"],HSC:`1014`,VendorItemID:`635-570-108`,REF:``},
+    {name:`SPO2 (REUSABLE) EAR SENSOR (ADULT) (>30 Kg)`,location:`F-2`,bins:["F-2"],carts:["F"],HSC:`72926`,VendorItemID:`4050`,REF:``},
+    {name:`SPO2 (REUSABLE) FINGER SENSOR (ADULT) (>30 Kg)`,location:`F-2`,bins:["F-2"],carts:["F"],HSC:`72930`,VendorItemID:`4055`,REF:``},
+    {name:`SPO2 (REUSABLE) FINGER SENSOR (PAEDS) (10 - 50 Kg)`,location:`F-2`,bins:["F-2"],carts:["F"],HSC:`72927`,VendorItemID:`4051JIT`,REF:``},
+    {name:`SPO2 (REUSABLE) FOREHEAD SENSOR (ADULT) (>30 Kg)`,location:`F-2`,bins:["F-2"],carts:["F"],HSC:`72928`,VendorItemID:`4053JIT`,REF:``}
+  ],
+  'E': [
+    {name:`BAIR HUGGER (PAEDS) (UNDERBODY)`,location:`E9+F9`,bins:["E9", "F9"],carts:["E", "F"],HSC:`43683`,VendorItemID:`3M55501`,REF:``},
+    {name:`BLOCK NEEDLE (22 G x 100 mm)`,location:`E-5`,bins:["E-5"],carts:["E"],HSC:`78290`,VendorItemID:`001285-77`,REF:``},
+    {name:`BLOCK NEEDLE (22 G x 50 mm)`,location:`E-5`,bins:["E-5"],carts:["E"],HSC:`43885`,VendorItemID:`001285-74`,REF:``},
+    {name:`BLOCK NEEDLE (22 G x 80 mm)`,location:`E-5`,bins:["E-5"],carts:["E"],HSC:`43882`,VendorItemID:`001285-71`,REF:``},
+    {name:`CADD SET (EPIDURAL)`,location:`E-8`,bins:["E-8"],carts:["E"],HSC:`52526`,VendorItemID:`21-7349-24`,REF:``},
+    {name:`CADD SET (NERVE BLOCK)`,location:`E-8`,bins:["E-8"],carts:["E"],HSC:`56047`,VendorItemID:`21-7346-24JT`,REF:``},
+    {name:`CATHETER (EPIDURAL)`,location:`E-2`,bins:["E-2"],carts:["E"],HSC:`7680`,VendorItemID:`4910-18JT`,REF:``},
+    {name:`DRAPE (OPTHALMIC) (BILATERAL) (31" x 50")`,location:`E-8`,bins:["E-8"],carts:["E"],HSC:`70276`,VendorItemID:`890419JT`,REF:``},
+    {name:`E-CATH TSUI (18 G x 51 mm)`,location:`E-5`,bins:["E-5"],carts:["E"],HSC:`61004`,VendorItemID:`301185-40E`,REF:``},
+    {name:`E-CATH TSUI (18 G x 75 mm)`,location:`E-5`,bins:["E-5"],carts:["E"],HSC:`61005`,VendorItemID:`211185-40E`,REF:``},
+    {name:`EPIDURAL CATHETER W/ STYLET (20 G)`,location:`E-2`,bins:["E-2"],carts:["E"],HSC:`43890`,VendorItemID:`001151-37C`,REF:``},
+    {name:`EPIDURAL FILTER (LUER LOCK)`,location:`E-2`,bins:["E-2"],carts:["E"],HSC:`66714`,VendorItemID:`179-100/386/010CZ`,REF:``},
+    {name:`EPIDURAL SET (SPIROL) 2" X 18 G W/ CATHETER`,location:`E-3`,bins:["E-3"],carts:["E"],HSC:`62671`,VendorItemID:`194-2036`,REF:``},
+    {name:`EPIGUARD SECUREMENT DEVICE`,location:`E-2`,bins:["E-2"],carts:["E"],HSC:`43894`,VendorItemID:`8170`,REF:``},
+    {name:`LOCKIT SECUREMENT DEVICE`,location:`E-2`,bins:["E-2"],carts:["E"],HSC:`56728`,VendorItemID:`100/399/218`,REF:``},
+    {name:`NEEDLE (CAUDAL) (22 G x 1-3/8")`,location:`E-7`,bins:["E-7"],carts:["E"],HSC:`53332`,VendorItemID:`332177`,REF:``},
+    {name:`NEEDLE (EPIDURAL) (18 G x 4.75")`,location:`E-3`,bins:["E-3"],carts:["E"],HSC:`69928`,VendorItemID:`332186`,REF:``},
+    {name:`NEEDLE (SPINAL) (25 G x 1")`,location:`E-7`,bins:["E-7"],carts:["E"],HSC:`55825`,VendorItemID:`NSV405073`,REF:``},
+    {name:`NEEDLE (SPINAL) (INTRODUCER) (20 G x 1.25")`,location:`E-7`,bins:["E-7"],carts:["E"],HSC:`55654`,VendorItemID:`80-6015`,REF:``},
+    {name:`NEEDLE (SPINAL) (WHITACRE) (25 G x 3.5")`,location:`E-7`,bins:["E-7"],carts:["E"],HSC:`64497`,VendorItemID:`NSV405138`,REF:``},
+    {name:`NEEDLE (SPINAL) (WHITACRE) (25 G x 5")`,location:`E-7`,bins:["E-7"],carts:["E"],HSC:`69311`,VendorItemID:`405140`,REF:``},
+    {name:`NEEDLE (TUOHY) (18 G x 3.5")`,location:`E-3`,bins:["E-3"],carts:["E"],HSC:`30053`,VendorItemID:`183A07`,REF:``},
+    {name:`NEONATAL EPIDURAL TRAY (20 G)`,location:`E-1`,bins:["E-1"],carts:["E"],HSC:`43956`,VendorItemID:`179-4990-20/24`,REF:``},
+    {name:`NERVE BLOCK (19 G)`,location:`E-4`,bins:["E-4"],carts:["E"],HSC:`78241`,VendorItemID:`AB-19608-S`,REF:``},
+    {name:`NERVE BLOCK (20 G)`,location:`E-4`,bins:["E-4"],carts:["E"],HSC:`78242`,VendorItemID:`AB-20604-S`,REF:``},
+    {name:`SPINAL ANESTHESIA KIT`,location:`E-6`,bins:["E-6"],carts:["E"],HSC:`74223`,VendorItemID:`80-9010`,REF:``},
+    {name:`SYRINGE (LOR GLASS)`,location:`E-1`,bins:["E-1"],carts:["E"],HSC:`60148`,VendorItemID:`179-4904`,REF:`nan`},
+    {name:`SYRINGE (LOR PLASTIC) (LUER SLIP) (7 ml)`,location:`E-1`,bins:["E-1"],carts:["E"],HSC:`30052`,VendorItemID:`4900`,REF:`nan`},
+    {name:`ULTRASOUND GEL (STERILE) (20 gm)`,location:`E-7`,bins:["E-7"],carts:["E"],HSC:`35586`,VendorItemID:`457-01-01`,REF:`nan`}
+  ],
+  'J': [
+    {name:`BIFUSE`,location:`J-4`,bins:["J-4"],carts:["J"],HSC:`60238`,VendorItemID:`ICMC33691`,REF:``},
+    {name:`CUROS CAP (GREEN) (MALE) (ON STRIP)`,location:`J-1`,bins:["J-1"],carts:["J"],HSC:`69094`,VendorItemID:`3MCM5-200R`,REF:``},
+    {name:`CUROS CAPS (FEMALE) (STERILE)`,location:`J-1`,bins:["J-1"],carts:["J"],HSC:`69214`,VendorItemID:`3MCFF1-270R`,REF:``},
+    {name:`EXT. SET (LARGE BORE)`,location:`J-1`,bins:["J-1"],carts:["J"],HSC:`3937`,VendorItemID:`10-1044`,REF:``},
+    {name:`IV CAP (WHITE) (CVL)`,location:`J-1`,bins:["J-1"],carts:["J"],HSC:`1700`,VendorItemID:`10-1005`,REF:``},
+    {name:`MICROCLAVE CONNECTOR`,location:`J-3`,bins:["J-3"],carts:["J"],HSC:`60244`,VendorItemID:`ICMC100`,REF:``},
+    {name:`QUADFUSE`,location:`J-3`,bins:["J-3"],carts:["J"],HSC:`60182`,VendorItemID:`ICMC33688`,REF:``},
+    {name:`RAPID INFUSION CATHETER (RIC) (7 Fr x 5 cm)`,location:`J-9`,bins:["J-9"],carts:["J"],HSC:`39601`,VendorItemID:`RC-09700`,REF:``},
+    {name:`RAPID INFUSION CATHETER (RIC) (8 Fr x 6.4 cm)`,location:`J-9`,bins:["J-9"],carts:["J"],HSC:`39600`,VendorItemID:`RC-09850`,REF:``},
+    {name:`STOPCOCK (4-WAY)`,location:`J-2`,bins:["J-2"],carts:["J"],HSC:`1878`,VendorItemID:`MX9341LSM`,REF:``},
+    {name:`SYRINGE (LEUR LOCK) (STERILE CAP)`,location:`J-4`,bins:["J-4"],carts:["J"],HSC:`6799`,VendorItemID:`SH-682101`,REF:`nan`},
+    {name:`SYRINGE (LUER LOCK) (1 ml)`,location:`J-8`,bins:["J-8"],carts:["J"],HSC:`48299`,VendorItemID:`BD309628`,REF:`nan`},
+    {name:`SYRINGE (LUER LOCK) (10 ml)`,location:`J-7`,bins:["J-7"],carts:["J"],HSC:`2203`,VendorItemID:`BD302995`,REF:`nan`},
+    {name:`SYRINGE (LUER LOCK) (20 ml)`,location:`J-6`,bins:["J-6"],carts:["J"],HSC:`2204`,VendorItemID:`BD302830`,REF:`nan`},
+    {name:`SYRINGE (LUER LOCK) (3 ml)`,location:`J-8`,bins:["J-8"],carts:["J"],HSC:`53539`,VendorItemID:`BD309657`,REF:`nan`},
+    {name:`SYRINGE (LUER LOCK) (30 ml)`,location:`J-6`,bins:["J-6"],carts:["J"],HSC:`2206`,VendorItemID:`BD302832`,REF:`nan`},
+    {name:`SYRINGE (LUER LOCK) (5 ml)`,location:`J-7`,bins:["J-7"],carts:["J"],HSC:`2200`,VendorItemID:`BD309646`,REF:`nan`},
+    {name:`SYRINGE (LUER LOCK) (50 ml)`,location:`J-5`,bins:["J-5"],carts:["J"],HSC:`2193`,VendorItemID:`BD309653`,REF:`nan`},
+    {name:`SYRINGE SET TUBING (8")`,location:`J-3`,bins:["J-3"],carts:["J"],HSC:`60625`,VendorItemID:`ICMC9023`,REF:`nan`},
+    {name:`SYRINGE SET TUBING (MICROCLAVE) (72")`,location:`J-2`,bins:["J-2"],carts:["J"],HSC:`60362`,VendorItemID:`ICMC33782`,REF:`nan`},
+    {name:`SYRINGE TUBING (PRESSURE SENSING DISC)`,location:`J-1`,bins:["J-1"],carts:["J"],HSC:`48293`,VendorItemID:`AL10014914`,REF:`nan`},
+    {name:`T-PIECE (W/PUSH-PORT)`,location:`J-5`,bins:["J-5"],carts:["J"],HSC:`60242`,VendorItemID:`ICA1001`,REF:`nan`},
+    {name:`TRIFUSE`,location:`J-4`,bins:["J-4"],carts:["J"],HSC:`60151`,VendorItemID:`ICMC33687`,REF:`nan`}
+  ],
+  'C': [
+    {name:`CMAC BLADE (Sz. 0)`,location:`C-6`,bins:["C-6"],carts:["C"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+    {name:`CMAC BLADE (Sz. 1)`,location:`C-6`,bins:["C-6"],carts:["C"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+    {name:`CMAC BLADE (Sz. 2)`,location:`C-5`,bins:["C-5"],carts:["C"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+    {name:`CMAC BLADE (Sz. 3)`,location:`C-5`,bins:["C-5"],carts:["C"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+    {name:`CMAC BLADE (Sz. 4)`,location:`C-5`,bins:["C-5"],carts:["C"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+    {name:`CMAC BLADE (Sz. 5)`,location:`C-5`,bins:["C-5"],carts:["C"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+    {name:`ETT (CUFFED) (3.0 mm)`,location:`C-8`,bins:["C-8"],carts:["C"],HSC:`72296`,VendorItemID:`35111`,REF:``},
+    {name:`ETT (CUFFED) (3.5 mm)`,location:`C-8`,bins:["C-8"],carts:["C"],HSC:`72297`,VendorItemID:`35112`,REF:``},
+    {name:`ETT (CUFFED) (4.0 mm)`,location:`C-7`,bins:["C-7"],carts:["C"],HSC:`72298`,VendorItemID:`35113`,REF:``},
+    {name:`ETT (CUFFED) (4.5 mm)`,location:`C-7`,bins:["C-7"],carts:["C"],HSC:`72299`,VendorItemID:`35114`,REF:``},
+    {name:`ETT (CUFFED) (5.0 mm)`,location:`C-7`,bins:["C-7"],carts:["C"],HSC:`32138`,VendorItemID:`100-199-050JT`,REF:``},
+    {name:`ETT (CUFFED) (5.5 mm)`,location:`C-7`,bins:["C-7"],carts:["C"],HSC:`32139`,VendorItemID:`100-199-055JT`,REF:``},
+    {name:`ETT (CUFFED) (6.0 mm)`,location:`C-7`,bins:["C-7"],carts:["C"],HSC:`32140`,VendorItemID:`100-199-060JT`,REF:``},
+    {name:`ETT (CUFFED) (6.5 mm)`,location:`C-7`,bins:["C-7"],carts:["C"],HSC:`32141`,VendorItemID:`100-199-065JT`,REF:``},
+    {name:`ETT (CUFFED) (7.0 mm)`,location:`C-7`,bins:["C-7"],carts:["C"],HSC:`32142`,VendorItemID:`100-199-070JT`,REF:``},
+    {name:`ETT (CUFFED) (7.5 mm)`,location:`C-7`,bins:["C-7"],carts:["C"],HSC:`32143`,VendorItemID:`100-199-075JT`,REF:``},
+    {name:`ETT (CUFFED) (8.0 mm)`,location:`C-7`,bins:["C-7"],carts:["C"],HSC:`32144`,VendorItemID:`100/199/080`,REF:``},
+    {name:`ETT (CUFFED) (8.5 mm)`,location:`C-7`,bins:["C-7"],carts:["C"],HSC:`32145`,VendorItemID:`100/199/085`,REF:``},
+    {name:`ETT (CUFFED) (REINFORCED) (5.0 mm)`,location:`C-1`,bins:["C-1"],carts:["C"],HSC:`31536`,VendorItemID:`5-12610`,REF:``},
+    {name:`ETT (CUFFED) (REINFORCED) (5.5 mm)`,location:`C-1`,bins:["C-1"],carts:["C"],HSC:`62293`,VendorItemID:`5-12611`,REF:``},
+    {name:`ETT (CUFFED) (REINFORCED) (6.0 mm)`,location:`C-1`,bins:["C-1"],carts:["C"],HSC:`43901`,VendorItemID:`F15038975060U`,REF:``},
+    {name:`ETT (CUFFED) (REINFORCED) (6.5 mm)`,location:`C-1`,bins:["C-1"],carts:["C"],HSC:`43904`,VendorItemID:`5-12613`,REF:``},
+    {name:`ETT (CUFFED) (REINFORCED) (7.0 mm)`,location:`C-1`,bins:["C-1"],carts:["C"],HSC:`43905`,VendorItemID:`5-12614`,REF:``},
+    {name:`ETT (CUFFED) (REINFORCED) (7.5 mm)`,location:`C-1`,bins:["C-1"],carts:["C"],HSC:`43906`,VendorItemID:`5-12615`,REF:``},
+    {name:`ETT (UNCUFFED) (2.0 mm)`,location:`C-8`,bins:["C-8"],carts:["C"],HSC:`71512`,VendorItemID:`5-10404`,REF:``},
+    {name:`ETT (UNCUFFED) (2.5 mm)`,location:`C-8`,bins:["C-8"],carts:["C"],HSC:`32146`,VendorItemID:`100-127-025JT`,REF:``},
+    {name:`ETT (UNCUFFED) (3.0 mm)`,location:`C-8`,bins:["C-8"],carts:["C"],HSC:`32147`,VendorItemID:`100-127-030JT`,REF:``},
+    {name:`ETT (UNCUFFED) (3.5 mm)`,location:`C-8`,bins:["C-8"],carts:["C"],HSC:`32148`,VendorItemID:`100-127-035JT`,REF:``},
+    {name:`ETT (UNCUFFED) (4.0 mm)`,location:`C-8`,bins:["C-8"],carts:["C"],HSC:`32149`,VendorItemID:`100-127-040JT`,REF:``},
+    {name:`ETT (UNCUFFED) (4.5 mm)`,location:`C-8`,bins:["C-8"],carts:["C"],HSC:`32150`,VendorItemID:`100-127-045JT`,REF:``},
+    {name:`ETT (UNCUFFED) (5.0 mm)`,location:`C-8`,bins:["C-8"],carts:["C"],HSC:`32151`,VendorItemID:`100-127-050JT`,REF:``},
+    {name:`ETT (UNCUFFED) (5.5 mm)`,location:`C-8`,bins:["C-8"],carts:["C"],HSC:`32152`,VendorItemID:`100-127-055JT`,REF:``},
+    {name:`ETT (UNCUFFED) (6.0 mm)`,location:`C-8`,bins:["C-8"],carts:["C"],HSC:`32153`,VendorItemID:`100/127/060`,REF:``},
+    {name:`ETT (UNCUFFED) (REINFORCED) (3.0 mm)`,location:`C-2`,bins:["C-2"],carts:["C"],HSC:`63613`,VendorItemID:`F15038965030U`,REF:``},
+    {name:`ETT (UNCUFFED) (REINFORCED) (3.5 mm)`,location:`C-2`,bins:["C-2"],carts:["C"],HSC:`31535`,VendorItemID:`F15038965035U`,REF:``},
+    {name:`ETT (UNCUFFED) (REINFORCED) (4.5 mm)`,location:`C-2`,bins:["C-2"],carts:["C"],HSC:`63615`,VendorItemID:`F15038965045U`,REF:``},
+    {name:`ETT NASAL RAE (CUFFED) (3.5 mm)`,location:`C-4`,bins:["C-4"],carts:["C"],HSC:`59759`,VendorItemID:`111781035`,REF:``},
+    {name:`ETT NASAL RAE (CUFFED) (4.0 mm)`,location:`C-4`,bins:["C-4"],carts:["C"],HSC:`59760`,VendorItemID:`1-7323-40`,REF:``},
+    {name:`ETT NASAL RAE (CUFFED) (4.5 mm)`,location:`C-4`,bins:["C-4"],carts:["C"],HSC:`59761`,VendorItemID:`1-7323-45`,REF:``},
+    {name:`ETT NASAL RAE (CUFFED) (5.0 mm)`,location:`C-4`,bins:["C-4"],carts:["C"],HSC:`59762`,VendorItemID:`1-7323-50`,REF:``},
+    {name:`ETT NASAL RAE (CUFFED) (5.5 mm)`,location:`C-4`,bins:["C-4"],carts:["C"],HSC:`59763`,VendorItemID:`111781055`,REF:``},
+    {name:`ETT NASAL RAE (CUFFED) (6.0 mm)`,location:`C-4`,bins:["C-4"],carts:["C"],HSC:`645`,VendorItemID:`96360`,REF:``},
+    {name:`ETT NASAL RAE (CUFFED) (6.5 mm)`,location:`C-4`,bins:["C-4"],carts:["C"],HSC:`646`,VendorItemID:`96365`,REF:``},
+    {name:`ETT NASAL RAE (CUFFED) (7.0 mm)`,location:`C-4`,bins:["C-4"],carts:["C"],HSC:`6817`,VendorItemID:`96370`,REF:``},
+    {name:`ETT NASAL RAE (CUFFED) (7.5 mm)`,location:`C-4`,bins:["C-4"],carts:["C"],HSC:`647`,VendorItemID:`96375`,REF:``},
+    {name:`ETT NASAL RAE (UNCUFFED) (3.5 mm)`,location:`C-2`,bins:["C-2"],carts:["C"],HSC:`69071`,VendorItemID:`5-22107`,REF:``},
+    {name:`ETT NASAL RAE (UNCUFFED) (4.0 mm)`,location:`C-2`,bins:["C-2"],carts:["C"],HSC:`69072`,VendorItemID:`5-22108`,REF:``},
+    {name:`ETT NASAL RAE (UNCUFFED) (4.5 mm)`,location:`C-2`,bins:["C-2"],carts:["C"],HSC:`69073`,VendorItemID:`5-22109`,REF:``},
+    {name:`ETT NASAL RAE (UNCUFFED) (5.0 mm)`,location:`C-2`,bins:["C-2"],carts:["C"],HSC:`69074`,VendorItemID:`5-22110`,REF:``},
+    {name:`ETT NASAL RAE (UNCUFFED) (5.5 mm)`,location:`C-2`,bins:["C-2"],carts:["C"],HSC:`72333`,VendorItemID:`5-22111`,REF:``},
+    {name:`ETT NASAL RAE (UNCUFFED) (6.0 mm)`,location:`C-2`,bins:["C-2"],carts:["C"],HSC:`69076`,VendorItemID:`5-22112`,REF:``},
+    {name:`ETT ORAL RAE (CUFFED) (3.5 mm)`,location:`C-3`,bins:["C-3"],carts:["C"],HSC:`50297`,VendorItemID:`35162`,REF:``},
+    {name:`ETT ORAL RAE (CUFFED) (4.0 mm)`,location:`C-3`,bins:["C-3"],carts:["C"],HSC:`50298`,VendorItemID:`35163`,REF:``},
+    {name:`ETT ORAL RAE (CUFFED) (4.5 mm)`,location:`C-3`,bins:["C-3"],carts:["C"],HSC:`50299`,VendorItemID:`35164JT`,REF:``},
+    {name:`ETT ORAL RAE (CUFFED) (5.0 mm)`,location:`C-3`,bins:["C-3"],carts:["C"],HSC:`39633`,VendorItemID:`76251`,REF:``},
+    {name:`ETT ORAL RAE (CUFFED) (5.5 mm)`,location:`C-3`,bins:["C-3"],carts:["C"],HSC:`39634`,VendorItemID:`76255`,REF:``},
+    {name:`ETT ORAL RAE (CUFFED) (6.0 mm)`,location:`C-3`,bins:["C-3"],carts:["C"],HSC:`471`,VendorItemID:`76260`,REF:``},
+    {name:`ETT ORAL RAE (CUFFED) (6.5 mm)`,location:`C-3`,bins:["C-3"],carts:["C"],HSC:`472`,VendorItemID:`76265`,REF:``},
+    {name:`ETT ORAL RAE (CUFFED) (7.0 mm)`,location:`C-3`,bins:["C-3"],carts:["C"],HSC:`473`,VendorItemID:`76270`,REF:``},
+    {name:`ETT ORAL RAE (CUFFED) (7.5 mm)`,location:`C-3`,bins:["C-3"],carts:["C"],HSC:`474`,VendorItemID:`76275`,REF:``},
+    {name:`ETT ORAL RAE (CUFFED) (8.0 mm)`,location:`C-3`,bins:["C-3"],carts:["C"],HSC:`642`,VendorItemID:`76280`,REF:``},
+    {name:`ETT ORAL RAE (CUFFED) (8.5 mm)`,location:`C-3`,bins:["C-3"],carts:["C"],HSC:`643`,VendorItemID:`76285`,REF:``},
+    {name:`ETT ORAL RAE (UNCUFFED) (3.0 mm)`,location:`C-2`,bins:["C-2"],carts:["C"],HSC:`69064`,VendorItemID:`5-22006`,REF:``},
+    {name:`ETT ORAL RAE (UNCUFFED) (3.5 mm)`,location:`C-2`,bins:["C-2"],carts:["C"],HSC:`69065`,VendorItemID:`5-22007`,REF:``},
+    {name:`ETT ORAL RAE (UNCUFFED) (4.0 mm)`,location:`C-2`,bins:["C-2"],carts:["C"],HSC:`72332`,VendorItemID:`5-22008`,REF:``},
+    {name:`ETT ORAL RAE (UNCUFFED) (4.5 mm)`,location:`C-2`,bins:["C-2"],carts:["C"],HSC:`69067`,VendorItemID:`5-22009`,REF:``},
+    {name:`ETT ORAL RAE (UNCUFFED) (5.0 mm)`,location:`C-2`,bins:["C-2"],carts:["C"],HSC:`69068`,VendorItemID:`5-22010`,REF:``},
+    {name:`LARYNGOSCOPE HANDLE (NEONATAL)`,location:`C-6`,bins:["C-6"],carts:["C"],HSC:`SPACE ONLY`,VendorItemID:`F-000.22.804`,REF:``},
+    {name:`LARYNGOSCOPE HANDLE (STANDARD)`,location:`C-6`,bins:["C-6"],carts:["C"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+    {name:`MAC BLADE (Sz. 1)`,location:`C-6`,bins:["C-6"],carts:["C"],HSC:`SPACE ONLY`,VendorItemID:`ANS-01-10030`,REF:``},
+    {name:`MAC BLADE (Sz. 2)`,location:`C-6`,bins:["C-6"],carts:["C"],HSC:`SPACE ONLY`,VendorItemID:`ANS-01-10022`,REF:``},
+    {name:`MAC BLADE (Sz. 3)`,location:`C-6`,bins:["C-6"],carts:["C"],HSC:`SPACE ONLY`,VendorItemID:`ANS-01-10023`,REF:``},
+    {name:`MAC BLADE (Sz. 4)`,location:`C-6`,bins:["C-6"],carts:["C"],HSC:`SPACE ONLY`,VendorItemID:`ANS-01-10024`,REF:``},
+    {name:`MAGILL FORCEP (LARGE)`,location:`C-5`,bins:["C-5"],carts:["C"],HSC:`SPACE ONLY`,VendorItemID:`ANS-01-10046`,REF:``},
+    {name:`MAGILL FORCEP (MEDIUM)`,location:`C-5`,bins:["C-5"],carts:["C"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+    {name:`MAGILL FORCEP (SMALL)`,location:`C-5`,bins:["C-5"],carts:["C"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+    {name:`MASK FLAVOR (BUBBLEGUM)`,location:`C-1`,bins:["C-1"],carts:["C"],HSC:`53004`,VendorItemID:`BBL-GUM`,REF:``},
+    {name:`MASK FLAVOR (ORANGE)`,location:`C-1`,bins:["C-1"],carts:["C"],HSC:`7613`,VendorItemID:`L0060`,REF:``},
+    {name:`MASK FLAVOR (STRAWBERRY)`,location:`C-1`,bins:["C-1"],carts:["C"],HSC:`7614`,VendorItemID:`L0320`,REF:``},
+    {name:`MASK FLAVOR (WATERMELON)`,location:`C-1`,bins:["C-1"],carts:["C"],HSC:`7612`,VendorItemID:`L0260`,REF:``},
+    {name:`MILLER (Sz. 0)`,location:`C-6`,bins:["C-6"],carts:["C"],HSC:`SPACE ONLY`,VendorItemID:`ANS-01-10027`,REF:``},
+    {name:`MILLER (Sz. 00)`,location:`C-6`,bins:["C-6"],carts:["C"],HSC:`44610`,VendorItemID:`799-F-000.22.119`,REF:``},
+    {name:`NASAL AIRWAY w/ADJ FLANGE (NPT) (12 Fr)`,location:`C-9`,bins:["C-9"],carts:["C"],HSC:`42777`,VendorItemID:`18542012`,REF:``},
+    {name:`NASAL AIRWAY w/ADJ FLANGE (NPT) (14 Fr)`,location:`C-9`,bins:["C-9"],carts:["C"],HSC:`42772`,VendorItemID:`18542014`,REF:``},
+    {name:`NASAL AIRWAY w/ADJ FLANGE (NPT) (16 Fr)`,location:`C-9`,bins:["C-9"],carts:["C"],HSC:`42770`,VendorItemID:`18542016`,REF:``},
+    {name:`NASAL AIRWAY w/ADJ FLANGE (NPT) (18 Fr)`,location:`C-9`,bins:["C-9"],carts:["C"],HSC:`42769`,VendorItemID:`18542018`,REF:``},
+    {name:`NASAL AIRWAY w/ADJ FLANGE (NPT) (20 Fr)`,location:`C-9`,bins:["C-9"],carts:["C"],HSC:`42765`,VendorItemID:`18542020`,REF:``},
+    {name:`NASAL AIRWAY w/ADJ FLANGE (NPT) (22 Fr)`,location:`C-9`,bins:["C-9"],carts:["C"],HSC:`72294`,VendorItemID:`18542022`,REF:``},
+    {name:`NASAL AIRWAY w/ADJ FLANGE (NPT) (24 Fr)`,location:`C-9`,bins:["C-9"],carts:["C"],HSC:`43501`,VendorItemID:`18542024`,REF:``},
+    {name:`NASAL AIRWAY w/ADJ FLANGE (NPT) (26 Fr)`,location:`C-9`,bins:["C-9"],carts:["C"],HSC:`72295`,VendorItemID:`18542026`,REF:``},
+    {name:`NEONATAL TRAY`,location:`C-1`,bins:["C-1"],carts:["C"],HSC:`SPACE ONLY`,VendorItemID:`nan`,REF:``},
+    {name:`PRECORDIAL STETHESCOPE SET`,location:`C-8`,bins:["C-8"],carts:["C"],HSC:`72441`,VendorItemID:`6-0025-05`,REF:``},
+    {name:`STYLET (10 Fr)`,location:`C-9`,bins:["C-9"],carts:["C"],HSC:`3940`,VendorItemID:`85864`,REF:``},
+    {name:`STYLET (14 Fr)`,location:`C-9`,bins:["C-9"],carts:["C"],HSC:`1891`,VendorItemID:`85865`,REF:``},
+    {name:`STYLET (6 Fr)`,location:`C-9`,bins:["C-9"],carts:["C"],HSC:`1893`,VendorItemID:`85863`,REF:``},
+    {name:`STYLET ULTRA-SLIP (NEO)`,location:`C-9`,bins:["C-9"],carts:["C"],HSC:`66996`,VendorItemID:`V24S5000N`,REF:``},
+    {name:`WISCONSIN (Sz. 1)`,location:`C-6`,bins:["C-6"],carts:["C"],HSC:`SPACE ONLY`,VendorItemID:`ANS-01-10018`,REF:`nan`},
+    {name:`WISCONSIN (Sz. 2)`,location:`C-6`,bins:["C-6"],carts:["C"],HSC:`SPACE ONLY`,VendorItemID:`ANS-01-10019`,REF:`nan`},
+    {name:`WISCONSIN (Sz. 3)`,location:`C-6`,bins:["C-6"],carts:["C"],HSC:`SPACE ONLY`,VendorItemID:`ANS-01-10020`,REF:`nan`}
+  ],
+  'B': [
+    {name:`GLIDESCOPE BLADE (MAC 3)`,location:`B-3`,bins:["B-3"],carts:["B"],HSC:`78752`,VendorItemID:`0270-1085`,REF:``},
+    {name:`GLIDESCOPE BLADE (MILLER 1)`,location:`B-3`,bins:["B-3"],carts:["B"],HSC:`78751`,VendorItemID:`0270-1088`,REF:``},
+    {name:`GLIDESCOPE BLADE (Sz. 1.0)`,location:`B-3`,bins:["B-3"],carts:["B"],HSC:`71827`,VendorItemID:`0270-0876`,REF:``},
+    {name:`GLIDESCOPE BLADE (Sz. 2.0)`,location:`B-3`,bins:["B-3"],carts:["B"],HSC:`71828`,VendorItemID:`0270-0877`,REF:``},
+    {name:`GLIDESCOPE BLADE (Sz. 2.5)`,location:`B-3`,bins:["B-3"],carts:["B"],HSC:`71829`,VendorItemID:`0270-0962`,REF:``},
+    {name:`GLIDESCOPE BLADE (Sz. 3.0)`,location:`B-3`,bins:["B-3"],carts:["B"],HSC:`71830`,VendorItemID:`0270-0938`,REF:``},
+    {name:`GLIDESCOPE BLADE (Sz. 4.0)`,location:`B-3`,bins:["B-3"],carts:["B"],HSC:`71831`,VendorItemID:`0270-0939`,REF:``},
+    {name:`HEAD HARNESS (ADULT)`,location:`B-8`,bins:["B-8"],carts:["B"],HSC:`71304`,VendorItemID:`9912001`,REF:``},
+    {name:`HEAD HARNESS (CHILD)`,location:`B-8`,bins:["B-8"],carts:["B"],HSC:`71305`,VendorItemID:`9912000`,REF:``},
+    {name:`LMA (FLEXIBLE) (Sz. 2.0)`,location:`B-1`,bins:["B-1"],carts:["B"],HSC:`47455`,VendorItemID:`327200000`,REF:``},
+    {name:`LMA (FLEXIBLE) (Sz. 2.5)`,location:`B-1`,bins:["B-1"],carts:["B"],HSC:`47456`,VendorItemID:`327250000`,REF:``},
+    {name:`LMA (FLEXIBLE) (Sz. 3.0)`,location:`B-1`,bins:["B-1"],carts:["B"],HSC:`47457`,VendorItemID:`327300000`,REF:``},
+    {name:`LMA (FLEXIBLE) (Sz. 4.0)`,location:`B-1`,bins:["B-1"],carts:["B"],HSC:`47458`,VendorItemID:`327400000`,REF:``},
+    {name:`LMA (Sz. 1.0)`,location:`B-2`,bins:["B-2"],carts:["B"],HSC:`43963`,VendorItemID:`329 100 000`,REF:``},
+    {name:`LMA (Sz. 1.5)`,location:`B-2`,bins:["B-2"],carts:["B"],HSC:`43964`,VendorItemID:`329 150 000`,REF:``},
+    {name:`LMA (Sz. 2.0)`,location:`B-2`,bins:["B-2"],carts:["B"],HSC:`43965`,VendorItemID:`329 200 000`,REF:``},
+    {name:`LMA (Sz. 2.5)`,location:`B-2`,bins:["B-2"],carts:["B"],HSC:`43966`,VendorItemID:`329 250 000`,REF:``},
+    {name:`LMA (Sz. 3.0)`,location:`B-1`,bins:["B-1"],carts:["B"],HSC:`43967`,VendorItemID:`329 300 000`,REF:``},
+    {name:`LMA (Sz. 4.0)`,location:`B-1`,bins:["B-1"],carts:["B"],HSC:`43968`,VendorItemID:`329 400 000`,REF:``},
+    {name:`LMA (Sz. 5.0)`,location:`B-1`,bins:["B-1"],carts:["B"],HSC:`78201`,VendorItemID:`329500000`,REF:``},
+    {name:`MASK (BVM) (INFLATABLE) (BLUE) (INFANT) (Sz. 1)`,location:`B-7`,bins:["B-7"],carts:["B"],HSC:`64341`,VendorItemID:`OL-081110-00`,REF:``},
+    {name:`MASK (BVM) (INFLATABLE) (GREEN) (ADULT) (SMALL) (Sz. 3)`,location:`B-6`,bins:["B-6"],carts:["B"],HSC:`64342`,VendorItemID:`OL-081130-00`,REF:``},
+    {name:`MASK (BVM) (INFLATABLE) (RED) (ADULT) (LARGE) (Sz. 5)`,location:`B-4`,bins:["B-4"],carts:["B"],HSC:`64456`,VendorItemID:`OL-081150-00`,REF:``},
+    {name:`MASK (BVM) (INFLATABLE) (WHITE) (CHILD) (Sz. 2)`,location:`B-7`,bins:["B-7"],carts:["B"],HSC:`64344`,VendorItemID:`OL-081120-00`,REF:``},
+    {name:`MASK (BVM) (INFLATABLE) (YELLOW) (ADULT) (MEDIUM) (Sz. 4)`,location:`B-5`,bins:["B-5"],carts:["B"],HSC:`64343`,VendorItemID:`OL-081140-00`,REF:``},
+    {name:`MASK (INFANT) (Sz. 2)`,location:`B-8`,bins:["B-8"],carts:["B"],HSC:`64348`,VendorItemID:`INFMASK2`,REF:``},
+    {name:`MASK (NEONATE) (Sz. 1)`,location:`B-8`,bins:["B-8"],carts:["B"],HSC:`64347`,VendorItemID:`NEOMASK1`,REF:``},
+    {name:`MASK (ORANGE) (ADULT) (Sz. 6)`,location:`B-4`,bins:["B-4"],carts:["B"],HSC:`64345`,VendorItemID:`OL-081160-00`,REF:``},
+    {name:`MASK (PREEMIE) (Sz. 0)`,location:`B-8`,bins:["B-8"],carts:["B"],HSC:`64346`,VendorItemID:`PREMASK0`,REF:``},
+    {name:`MCGRATH MAC (Sz. 1)`,location:`B-9`,bins:["B-9"],carts:["B"],HSC:`71300`,VendorItemID:`350-072-000`,REF:``},
+    {name:`MCGRATH MAC (Sz. 2)`,location:`B-9`,bins:["B-9"],carts:["B"],HSC:`71301`,VendorItemID:`350-017-000`,REF:``},
+    {name:`MCGRATH MAC (Sz. 3)`,location:`B-9`,bins:["B-9"],carts:["B"],HSC:`71302`,VendorItemID:`350-005-000`,REF:``},
+    {name:`MCGRATH MAC-X (Sz. 3)`,location:`B-9`,bins:["B-9"],carts:["B"],HSC:`71303`,VendorItemID:`X3-003-000`,REF:``},
+    {name:`NASAL AIRWAY (NPT) (6 mm)`,location:`B-8`,bins:["B-8"],carts:["B"],HSC:`824`,VendorItemID:`SIM340060`,REF:``},
+    {name:`NASAL AIRWAY (NPT) (7 mm)`,location:`B-8`,bins:["B-8"],carts:["B"],HSC:`825`,VendorItemID:`SIM340070`,REF:``},
+    {name:`NASAL AIRWAY (NPT) (8 mm)`,location:`B-8`,bins:["B-8"],carts:["B"],HSC:`826`,VendorItemID:`SIM340080`,REF:``},
+    {name:`NASAL AIRWAY (NPT) (9 mm)`,location:`B-8`,bins:["B-8"],carts:["B"],HSC:`827`,VendorItemID:`625-340090`,REF:``},
+    {name:`ORAL AIRWAY (BLACK) (60 mm)`,location:`B-6`,bins:["B-6"],carts:["B"],HSC:`3837`,VendorItemID:`991-2106-CA`,REF:``},
+    {name:`ORAL AIRWAY (BLUE) (50 mm)`,location:`B-6`,bins:["B-6"],carts:["B"],HSC:`3838`,VendorItemID:`991-2105-CA`,REF:``},
+    {name:`ORAL AIRWAY (GREEN) (80 mm)`,location:`B-5`,bins:["B-5"],carts:["B"],HSC:`577`,VendorItemID:`991-2108-CA`,REF:``},
+    {name:`ORAL AIRWAY (PINK) (40 mm)`,location:`B-7`,bins:["B-7"],carts:["B"],HSC:`3839`,VendorItemID:`991-2104-CA`,REF:``},
+    {name:`ORAL AIRWAY (RED) (100 mm)`,location:`B-4`,bins:["B-4"],carts:["B"],HSC:`72302`,VendorItemID:`991-2110-CA`,REF:``},
+    {name:`ORAL AIRWAY (WHITE) (70 mm)`,location:`B-5`,bins:["B-5"],carts:["B"],HSC:`3835`,VendorItemID:`991-2107-CA`,REF:``},
+    {name:`ORAL AIRWAY (YELLOW) (90 mm)`,location:`B-4`,bins:["B-4"],carts:["B"],HSC:`3836`,VendorItemID:`991-2109-CA`,REF:``}
+  ]
+};
+
+    // ---- tiny helper search (offline, no dependencies) ----
+    function searchItems(records, q) {
+      if (!q) return records.slice(0, 200);
+      q = q.toLowerCase().trim();
+      const words = q.split(/\s+/);
+      const scored = records.map(r => {
+        const hay = (r.name + " " + r.location).toLowerCase();
+        const ok = words.every(w => hay.includes(w));
+        let score = 0;
+        if (ok) {
+          if (hay.startsWith(words[0])) score += 2;
+          if (r.location.toLowerCase().includes(words[0])) score += 1;
+          score += (r.name.length > 0 ? 1 : 0);
+        }
+        return ok ? { item: r, score } : null;
+      }).filter(Boolean);
+      scored.sort((a,b) => b.score - a.score);
+      return scored.map(s => s.item);
+    }
+
+    const svg = document.getElementById('map');
+    const qEl = document.getElementById('q'); const resultList = document.getElementById('resultList'); const statusEl = document.getElementById('status');
+
+    /* ======================  TUNE POSITIONS  ====================== */
+    const SCALE = 1.0;
+    const OFFSET_X = 0;
+    const OFFSET_Y = 0;
+
+    const ROOM = { x:20, y:20, w:960, h:660 };
+    const DOOR = { x:40, y:250, w:60, h:140 };
+    const EQUIP = { x:100, y:440, w:240, h:170 };
+
+    const CARTS = {
+  // All positions and sizes scaled to fit 1000x700 SVG from 168"x124" room
+  // scaleX = 1000/168 ≈ 5.95, scaleY = 700/124 ≈ 5.65
+  // All positions and sizes scaled to fit 1000x700 SVG from 168"x124" room
+  // scaleX = 1000/168 ≈ 5.95, scaleY = 700/124 ≈ 5.65
+  A: { x: 190,  y: 90,  w: 155, h: 95 },
+  B: { x: 350, y: 45,  w: 195, h: 90 },
+  C: { x: 550, y: 45,  w: 195, h: 90 },
+  D: { x: 750, y: 45,  w: 110, h: 90 },
+  E: { x: 900, y: 140, w: 62,  h: 105 },
+  F: { x: 900, y: 250, w: 62,  h: 105 },
+  J: { x: 340, y: 280, w: 65,  h: 150 },
+  I: { x: 410, y: 340, w: 150, h: 90 },
+  H: { x: 565, y: 312, w: 150, h: 90 },
+  G: { x: 720, y: 340, w: 150, h: 62  }
+
+    };
+
+    const T = (o) => ({ x:o.x*SCALE+OFFSET_X, y:o.y*SCALE+OFFSET_Y, w:o.w*SCALE, h:o.h*SCALE });
+    function rectEl({x,y,w,h,cls}){ const r=document.createElementNS('http://www.w3.org/2000/svg','rect'); r.setAttribute('x',x); r.setAttribute('y',y); r.setAttribute('width',w); r.setAttribute('height',h); r.setAttribute('rx',6); r.setAttribute('class',cls); return r; }
+    function textEl({x,y,text,cls,rotate,fontSize}){ const t=document.createElementNS('http://www.w3.org/2000/svg','text'); t.setAttribute('x',x); t.setAttribute('y',y); t.setAttribute('text-anchor','middle'); t.setAttribute('class',cls); t.setAttribute('font-size',fontSize||'16'); if(rotate) t.setAttribute('transform',`rotate({rotate} {x} {y})`); t.textContent=text; return t; }
+
+    (function build(){
+      const room=T(ROOM), door=T(DOOR), equip=T(EQUIP);
+      // Add grid background
+      const grid = document.createElementNS('http://www.w3.org/2000/svg','g');
+      for(let x=0;x<=1000;x+=20){
+        const line=document.createElementNS('http://www.w3.org/2000/svg','line');
+        line.setAttribute('x1',x); line.setAttribute('y1',0); line.setAttribute('x2',x); line.setAttribute('y2',700);
+        line.setAttribute('stroke','#374151'); line.setAttribute('stroke-width','0.5');
+        grid.appendChild(line);
+      }
+      for(let y=0;y<=700;y+=20){
+        const line=document.createElementNS('http://www.w3.org/2000/svg','line');
+        line.setAttribute('x1',0); line.setAttribute('y1',y); line.setAttribute('x2',1000); line.setAttribute('y2',y);
+        line.setAttribute('stroke','#374151'); line.setAttribute('stroke-width','0.5');
+        grid.appendChild(line);
+      }
+      svg.appendChild(grid);
+      svg.appendChild(rectEl({...room, cls:'room'}));
+      svg.appendChild(rectEl({...door, cls:'door'}));
+  svg.appendChild(textEl({x:door.x+door.w/2, y:door.y+door.h/2+5, text:'Doorway', cls:'light', fontSize:'13'}));
+      svg.appendChild(rectEl({...equip, cls:'equip'}));
+      svg.appendChild(textEl({x:equip.x+equip.w/2, y:equip.y+equip.h/2+6, text:'Equipment area', cls:'light'}));
+
+      Object.entries(CARTS).forEach(([id, base]) => {
+        const c=T(base);
+        const g=document.createElementNS('http://www.w3.org/2000/svg','g');
+        g.setAttribute('id','cart-'+id); g.setAttribute('data-cart',id); g.setAttribute('class','cart');
+        g.appendChild(rectEl({...c, cls:'cart-rect'})); svg.appendChild(g);
+        svg.appendChild(textEl({x:c.x+c.w/2, y:c.y+c.h/2+4, text:'CART '+id, cls:'cart-label'}));
+      });
+    })();
+
+    const cartsOrder = ['A','B','C','D','E','F','G','H','I','J'];
+    const cartGroups = Array.from(svg.querySelectorAll('.cart'));
+    function clearPulse(){ cartGroups.forEach(g=>g.classList.remove('pulse')); }
+    function pulseCarts(ids){ clearPulse(); (ids||[]).forEach(id=>{ const el=document.getElementById('cart-'+id); if(el) el.classList.add('pulse'); }); }
+
+    function card(r){
+      const bins=(r.bins||[]).map(b=>`<span class="bin">${b}</span>`).join('');
+      return `<article><strong>${r.name}</strong><div class="small" style="margin-top:6px">
+        <div><span class="muted">Bin Loc:</span> ${r.location} ${bins}</div>
+        <div><span class="muted">HSC#:</span> ${r.HSC||'—'}</div>
+        <div><span class="muted">Vendor Item ID:</span> ${r.VendorItemID||'—'}</div>
+      </div></article>`;
+    }
+
+    cartsOrder.forEach(id=>{
+      const el=document.getElementById('cart-'+id);
+      el.addEventListener('click',()=>{
+        const items=BY_CART[id]||[];
+        resultList.innerHTML = `<h3 style="margin:6px 0 4px">Cart ${id} — ${items.length} items</h3>` + items.map(card).join('');
+        statusEl.textContent = `Cart ${id}`; pulseCarts([id]); window.scrollTo({top:0, behavior:'smooth'});
+      });
+    });
+
+    function onSearch(){
+      const q=qEl.value;
+      const res=searchItems(RECORDS,q);
+      resultList.innerHTML = res.map(card).join('');
+      statusEl.textContent = q ? `Found ${res.length}` : `Showing ${res.length} of ${RECORDS.length}`;
+      const first = res[0]; const firstCarts = first?.carts || [];
+      const allCarts = Array.from(new Set(res.flatMap(r=>r.carts||[])));
+      pulseCarts(firstCarts.length ? firstCarts : allCarts);
+    }
+    qEl.addEventListener('input', onSearch); onSearch();
+  </script>
+</body>
+</html>
